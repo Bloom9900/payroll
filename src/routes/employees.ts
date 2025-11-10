@@ -76,6 +76,7 @@ employeesRouter.post('/', (req, res) => {
     return res.status(400).json({ error: 'holidayDaysPerYear must be a positive number' })
   }
 
+  const userId = (req as any).user?.id || 'system'
   const record = addEmployee({
     id: payload.id,
     firstName: String(payload.firstName),
@@ -101,7 +102,7 @@ employeesRouter.post('/', (req, res) => {
     holidayAllowanceAccruedCentsYtd: Number(payload.holidayAllowanceAccruedCentsYtd ?? 0),
     holidayAllowancePaidCentsYtd: Number(payload.holidayAllowancePaidCentsYtd ?? 0),
     pendingExpenseClaimsCents: Number(payload.pendingExpenseClaimsCents ?? 0)
-  })
+  }, userId)
 
   res.status(201).json(record)
 })

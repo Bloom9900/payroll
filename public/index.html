@@ -13,8 +13,11 @@
       <button data-tab="dashboard" class="active">Dashboard</button>
       <button data-tab="employees">Employees</button>
       <button data-tab="offboarding">Offboarding</button>
-      <button data-tab="runs">Runs</button>
+      <button data-tab="runs">Payroll Runs</button>
       <button data-tab="calculators">Calculators</button>
+      <button data-tab="compliance">Compliance</button>
+      <button data-tab="mock-services">Mock Services</button>
+      <button data-tab="audit">Audit Log</button>
       <button data-tab="settings">Settings</button>
       <button data-tab="command">Command Center</button>
     </nav>
@@ -50,17 +53,39 @@
       <div class="grid">
         <div class="card">
           <h3>Quick actions</h3>
-          <button id="qaPreview">Preview current month</button>
-          <button id="qaSepa">Generate SEPA XML</button>
-          <div id="qaStatus" class="muted"></div>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <button id="qaPreview">Preview current month</button>
+            <button id="qaSepa" class="secondary">Generate SEPA XML</button>
+            <button id="qaCreateRun" class="secondary" onclick="document.querySelector('button[data-tab=\"runs\"]').click()">Create Payroll Run</button>
+          </div>
+          <div id="qaStatus" class="muted" style="margin-top:12px;"></div>
         </div>
         <div class="card">
           <h3>Notes on NL rules</h3>
-          <ul>
+          <ul style="line-height:1.8;">
             <li>Holiday allowance is typically 8 percent.</li>
             <li>Minimum statutory vacation equals four times weekly hours per year.</li>
             <li>Unused vacation on termination must be paid out.</li>
+            <li>Transition allowance: 1/3 monthly salary per year of service (mandatory for dismissals).</li>
+            <li>30% ruling: Maximum 5 years, expires automatically.</li>
           </ul>
+        </div>
+      </div>
+      <div class="card" style="margin-top:16px;">
+        <h3>System Status</h3>
+        <div class="grid two">
+          <div>
+            <strong>Scheduler:</strong> <span class="success">●</span> Running (runs on 25th of each month)
+          </div>
+          <div>
+            <strong>Data Storage:</strong> <span class="info">●</span> In-Memory (10 employees)
+          </div>
+          <div>
+            <strong>Mock Services:</strong> <span class="success">●</span> Active
+          </div>
+          <div>
+            <strong>Audit Logging:</strong> <span class="success">●</span> Enabled
+          </div>
         </div>
       </div>
     </section>
@@ -97,7 +122,7 @@
       <div class="card">
         <div class="row">
           <h2>Employees</h2>
-          <input id="search" placeholder="Search name or email" />
+          <input id="search" placeholder="Search name or email" style="flex:1;max-width:300px;" />
         </div>
         <table id="empTable">
           <thead>
@@ -108,24 +133,6 @@
               <th>Start</th>
               <th>Salary</th>
               <th>Hours per week</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-
-      <div class="card" id="empDetail" hidden>
-        <h3>Employee detail</h3>
-        <div id="empFields"></div>
-        <h4>Monthly preview</h4>
-        <div class="row">
-          <input id="empMonth" type="month" />
-          <button id="empPreviewBtn">Preview</button>
-        </div>
-        <table id="empPreviewTable">
-          <thead>
-            <tr>
-              <th>Gross</th><th>Holiday</th><th>30 ruling</th><th>Taxable</th><th>Net</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -163,13 +170,39 @@
 
     <section id="runs" class="tab">
       <div class="card">
-        <h2>Monthly payroll</h2>
+        <h2>Payroll Runs</h2>
+        <p class="muted small">Create, approve, and manage monthly payroll runs. SEPA files are generated automatically.</p>
         <div class="row">
-          <input id="month" type="month" />
-          <button id="btnPreview">Preview</button>
+          <input id="month" type="month" style="flex:1;" />
+          <button id="btnCreateRun" class="success">Create Payroll Run</button>
+          <button id="btnPreview" class="secondary">Preview</button>
           <button id="btnSepa" disabled>Generate SEPA XML</button>
-          <span id="status" class="muted"></span>
         </div>
+        <div id="status" class="muted" style="margin-top:8px;"></div>
+      </div>
+      <div class="card">
+        <h3>Payroll Run History</h3>
+        <p class="muted small">All payroll runs with status and totals</p>
+        <table id="payrollRunsTable">
+          <thead>
+            <tr>
+              <th>Month</th>
+              <th>Status</th>
+              <th>Employees</th>
+              <th>Total Gross</th>
+              <th>Total Net</th>
+              <th>Created</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td colspan="7" class="muted">Loading payroll runs...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <h3>Payroll Preview</h3>
+        <p class="muted small">Detailed breakdown for selected month</p>
         <table id="employeesTable">
           <thead>
             <tr>
@@ -181,6 +214,122 @@
               <th>30 ruling</th>
               <th>Taxable</th>
               <th>Net</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="compliance" class="tab">
+      <div class="card">
+        <h2>Compliance & Reporting</h2>
+        <p class="muted small">Dutch payroll compliance tools: pension, health insurance, jaaropgave, and tax filings</p>
+        <div class="grid two">
+          <div class="card">
+            <h3>Pension Contributions</h3>
+            <p class="muted small">Calculate monthly pension contributions for all employees</p>
+            <button id="btnPensionMonthly">Calculate Monthly Pension</button>
+            <div id="pensionResults" style="margin-top:16px;"></div>
+          </div>
+          <div class="card">
+            <h3>Health Insurance</h3>
+            <p class="muted small">Calculate monthly health insurance premiums</p>
+            <button id="btnHealthInsurance">Calculate Health Insurance</button>
+            <div id="healthInsuranceResults" style="margin-top:16px;"></div>
+          </div>
+          <div class="card">
+            <h3>Year-End Statements (Jaaropgave)</h3>
+            <p class="muted small">Generate annual tax statements for employees</p>
+            <label style="display:block;margin-bottom:8px;">Employee
+              <select id="jaaropgaveEmployee" style="width:100%;margin-top:4px;"></select>
+            </label>
+            <div class="row">
+              <input id="jaaropgaveYear" type="number" placeholder="Year" value="2024" style="flex:1;" />
+              <button id="btnGenerateJaaropgave" class="secondary">Generate</button>
+            </div>
+            <div class="row" style="margin-top:8px;">
+              <button id="btnGenerateAllJaaropgave" style="flex:1;">Generate All for Year</button>
+            </div>
+            <div id="jaaropgaveResults" style="margin-top:16px;"></div>
+          </div>
+          <div class="card">
+            <h3>Tax Filing (Loonaangifte)</h3>
+            <p class="muted small">Generate and submit monthly payroll tax returns</p>
+            <div class="row">
+              <input id="taxFilingMonth" type="month" style="flex:1;" />
+              <button id="btnGenerateTaxFiling">Generate</button>
+            </div>
+            <div id="taxFilingResults" style="margin-top:16px;"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="mock-services" class="tab">
+      <div class="card">
+        <h2>Mock Services</h2>
+        <p class="muted small">Simulated external integrations - all data stored in-memory. Ready for real integrations later.</p>
+        <div class="grid two">
+          <div class="card">
+            <h3>Bank Submissions</h3>
+            <p class="muted small">View payment submissions to bank</p>
+            <button id="btnViewBankSubmissions">View Submissions</button>
+            <div id="bankSubmissions" style="margin-top:16px;"></div>
+          </div>
+          <div class="card">
+            <h3>Pension Provider</h3>
+            <p class="muted small">View pension contribution submissions</p>
+            <button id="btnViewPensionSubmissions">View Submissions</button>
+            <div id="pensionSubmissions" style="margin-top:16px;"></div>
+          </div>
+          <div class="card">
+            <h3>Health Insurance</h3>
+            <p class="muted small">View health insurance submissions</p>
+            <button id="btnViewInsuranceSubmissions">View Submissions</button>
+            <div id="insuranceSubmissions" style="margin-top:16px;"></div>
+          </div>
+          <div class="card">
+            <h3>Tax Authority (Belastingdienst)</h3>
+            <p class="muted small">View tax filing submissions</p>
+            <button id="btnViewTaxFilings">View Tax Filings</button>
+            <div id="taxFilings" style="margin-top:16px;"></div>
+          </div>
+          <div class="card">
+            <h3>Email Service</h3>
+            <p class="muted small">View email notifications</p>
+            <button id="btnViewEmails">View Emails</button>
+            <div id="emails" style="margin-top:16px;"></div>
+          </div>
+          <div class="card">
+            <h3>HR System Sync</h3>
+            <p class="muted small">Sync employee data from HR system</p>
+            <div class="row">
+              <button id="btnSyncHr" style="flex:1;">Sync HR System</button>
+              <button id="btnViewHrSyncs" class="secondary">View History</button>
+            </div>
+            <div id="hrSyncs" style="margin-top:16px;"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="audit" class="tab">
+      <div class="card">
+        <h2>Audit Log</h2>
+        <p class="muted small">Track all system events and changes for compliance and debugging</p>
+        <div class="row">
+          <input id="auditEventType" placeholder="Filter by event type (e.g., payroll_run_created)" style="flex:1;" />
+          <button id="btnRefreshAudit" class="secondary">Refresh</button>
+          <button id="btnRecentAudit" class="secondary">Recent 50</button>
+        </div>
+        <table id="auditLogTable">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Event Type</th>
+              <th>User</th>
+              <th>Data</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -254,6 +403,45 @@
   <footer>
     <small>Prototype UI. Replace dummy data with your vendor integration later.</small>
   </footer>
+
+  <!-- Employee Detail Modal -->
+  <div id="employeeModal" class="modal" hidden>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modalEmployeeName">Employee Details</h2>
+        <button class="modal-close" id="closeEmployeeModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="empFields"></div>
+        <div style="margin-top:32px;padding-top:24px;border-top:2px solid rgba(138,180,255,0.2);">
+          <h3>Monthly Payroll Preview</h3>
+          <p class="muted small" style="margin-bottom:16px;">View payroll calculations for any month</p>
+          <div class="row" style="margin-bottom:16px;">
+            <input id="empMonth" type="month" style="flex:1;max-width:200px;" />
+            <button id="empPreviewBtn" class="secondary">Update Preview</button>
+          </div>
+          <table id="empPreviewTable">
+            <thead>
+              <tr>
+                <th>Gross</th><th>Holiday</th><th>30% Ruling</th><th>Taxable</th><th>Net</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="5" class="muted">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="margin-top:32px;padding-top:24px;border-top:2px solid rgba(138,180,255,0.2);">
+          <h3>Change History</h3>
+          <p class="muted small" style="margin-bottom:16px;">Track all changes made to this employee record</p>
+          <div id="employeeHistory">
+            <p class="muted small">Loading history...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-overlay" id="modalOverlay"></div>
+  </div>
 
   <script src="/main.js"></script>
 </body>

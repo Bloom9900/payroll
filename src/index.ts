@@ -8,6 +8,15 @@ import { employeesRouter } from './routes/employees.js'
 import { calculators } from './routes/calculators.js'
 import { joinersRouter } from './routes/joiners.js'
 import { offboardingRouter } from './routes/offboarding.js'
+import { payrollRunsRouter } from './routes/payrollRuns.js'
+import { auditRouter } from './routes/audit.js'
+import { mockServicesRouter } from './routes/mockServices.js'
+import { pensionRouter } from './routes/pension.js'
+import { healthInsuranceRouter } from './routes/healthInsurance.js'
+import { jaaropgaveRouter } from './routes/jaaropgave.js'
+import { taxFilingRouter } from './routes/taxFiling.js'
+import { employeeHistoryRouter } from './routes/employeeHistory.js'
+import { startScheduler } from './services/scheduler.js'
 
 const app = express()
 app.use(helmet({ contentSecurityPolicy: false })) // allow our inline script to run
@@ -20,12 +29,29 @@ app.use(express.static(publicDir))
 
 app.get('/health', (_req,res)=>res.json({ ok:true }))
 
+// Existing routes
 app.use('/api/payroll', payroll)
 app.use('/api/employees', employeesRouter)
 app.use('/api/calculators', calculators)
 app.use('/api/joiners', joinersRouter)
 app.use('/api/offboarding', offboardingRouter)
 
+// New routes
+app.use('/api/payroll-runs', payrollRunsRouter)
+app.use('/api/audit', auditRouter)
+app.use('/api/mock-services', mockServicesRouter)
+app.use('/api/pension', pensionRouter)
+app.use('/api/health-insurance', healthInsuranceRouter)
+app.use('/api/jaaropgave', jaaropgaveRouter)
+app.use('/api/tax-filing', taxFilingRouter)
+app.use('/api/employee-history', employeeHistoryRouter)
+
 app.get('*', (_req,res)=>res.sendFile(path.join(publicDir,'index.html')))
 
-app.listen(config.port, ()=> console.log('Server on port ' + config.port))
+// Start scheduler
+startScheduler()
+
+app.listen(config.port, ()=> {
+  console.log('Server on port ' + config.port)
+  console.log('Payroll scheduler started')
+})
