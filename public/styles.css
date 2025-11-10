@@ -10,6 +10,9 @@ main{ padding:24px; }
 .card{ background:var(--card); border-radius:12px; padding:16px; margin-bottom:16px; }
 .grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
 .grid.two{ grid-template-columns:1fr 1fr; }
+.pulse-grid{ display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:12px; margin-top:12px; }
+.pulse-value{ display:block; font-size:32px; font-weight:700; color:var(--accent); }
+.pulse-label{ display:block; font-size:12px; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
 .row{ display:flex; gap:12px; align-items:center; }
 input, select{ padding:8px; border-radius:8px; border:1px solid #2a3355; background:#0e1430; color:var(--text); }
 button{ padding:10px 14px; border:0; border-radius:10px; background:var(--accent); color:#0b1021; font-weight:600; cursor:pointer; }
@@ -21,3 +24,25 @@ th, td{ padding:10px 12px; border-bottom:1px solid #2a3355; text-align:left; }
 th{ background:#1c2340; }
 .tab{ display:none; }
 .tab.active{ display:block; }
+.checkbox{ display:flex; align-items:center; gap:8px; font-size:14px; }
+.checkbox input{ width:auto; }
+.form-actions{ grid-column:1 / -1; display:flex; align-items:center; gap:16px; }
+.offboarding-grid{ align-items:flex-start; }
+.offboarding-summary{ background:#11162f; border-radius:12px; padding:16px; min-height:220px; display:flex; flex-direction:column; gap:12px; }
+.offboarding-summary h3{ margin:0; }
+.offboarding-summary ul{ margin:0; padding-left:18px; }
+.command-hero{ background:linear-gradient(135deg, rgba(138,180,255,0.18), rgba(17,22,47,0.95)); border:1px solid rgba(138,180,255,0.2); }
+.command-grid{ display:grid; grid-template-columns:2fr 1.2fr 1fr; gap:24px; margin-top:20px; }
+.command-panel{ background:rgba(15,21,48,0.8); border-radius:16px; padding:16px; box-shadow:0 12px 32px rgba(10,14,30,0.35); backdrop-filter:blur(4px); }
+.command-panel h3{ margin-top:0; }
+.mix-bars{ display:flex; flex-direction:column; gap:8px; margin-bottom:20px; }
+.mix-bar{ background:#1c2340; border-radius:10px; overflow:hidden; position:relative; height:32px; display:flex; align-items:center; }
+.mix-bar span{ position:absolute; left:12px; font-weight:600; color:#fff; }
+.mix-bar-fill{ height:100%; background:var(--accent); }
+.actions{ list-style:none; margin:0; padding-left:0; display:flex; flex-direction:column; gap:6px; }
+.actions li{ background:#1b2344; border-radius:8px; padding:8px 12px; }
+
+@media (max-width: 1100px){
+  .grid, .grid.two, .command-grid{ grid-template-columns:1fr; }
+  .pulse-grid{ grid-template-columns:repeat(2,1fr); }
+}

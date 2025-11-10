@@ -7,6 +7,7 @@ import { payroll } from './routes/payroll.js';
 import { employeesRouter } from './routes/employees.js';
 import { calculators } from './routes/calculators.js';
 import { joinersRouter } from './routes/joiners.js';
+import { offboardingRouter } from './routes/offboarding.js';
 const app = express();
 app.use(helmet({ contentSecurityPolicy: false })); // allow our inline script to run
 app.use(express.json());
@@ -19,5 +20,6 @@ app.use('/api/payroll', payroll);
 app.use('/api/employees', employeesRouter);
 app.use('/api/calculators', calculators);
 app.use('/api/joiners', joinersRouter);
+app.use('/api/offboarding', offboardingRouter);
 app.get('*', (_req, res) => res.sendFile(path.join(publicDir, 'index.html')));
 app.listen(config.port, () => console.log('Server on port ' + config.port));
