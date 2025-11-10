@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NL Payroll Automation</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header>
+    <h1>NL Payroll Automation</h1>
+    <nav class="tabs">
+      <button data-tab="dashboard" class="active">Dashboard</button>
+      <button data-tab="employees">Employees</button>
+      <button data-tab="runs">Runs</button>
+      <button data-tab="calculators">Calculators</button>
+      <button data-tab="settings">Settings</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="dashboard" class="tab active">
+      <div class="card">
+        <h2>Snapshot</h2>
+        <div id="snapshot"></div>
+      </div>
+      <div class="grid">
+        <div class="card">
+          <h3>Quick actions</h3>
+          <button id="qaPreview">Preview current month</button>
+          <button id="qaSepa">Generate SEPA XML</button>
+          <div id="qaStatus" class="muted"></div>
+        </div>
+        <div class="card">
+          <h3>Notes on NL rules</h3>
+          <ul>
+            <li>Holiday allowance is typically 8 percent.</li>
+            <li>Minimum statutory vacation equals four times weekly hours per year.</li>
+            <li>Unused vacation on termination must be paid out.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="employees" class="tab">
+      <div class="card">
+        <div class="row">
+          <h2>Employees</h2>
+          <input id="search" placeholder="Search name or email" />
+        </div>
+        <table id="empTable">
+          <thead>
+            <tr>
+              <th>Employee ID</th>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Start</th>
+              <th>Salary</th>
+              <th>Hours per week</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="card" id="empDetail" hidden>
+        <h3>Employee detail</h3>
+        <div id="empFields"></div>
+        <h4>Monthly preview</h4>
+        <div class="row">
+          <input id="empMonth" type="month" />
+          <button id="empPreviewBtn">Preview</button>
+        </div>
+        <table id="empPreviewTable">
+          <thead>
+            <tr>
+              <th>Gross</th><th>Holiday</th><th>30 ruling</th><th>Taxable</th><th>Net</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="runs" class="tab">
+      <div class="card">
+        <h2>Monthly payroll</h2>
+        <div class="row">
+          <input id="month" type="month" />
+          <button id="btnPreview">Preview</button>
+          <button id="btnSepa" disabled>Generate SEPA XML</button>
+          <span id="status" class="muted"></span>
+        </div>
+        <table id="employeesTable">
+          <thead>
+            <tr>
+              <th>Employee ID</th>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Gross</th>
+              <th>Holiday</th>
+              <th>30 ruling</th>
+              <th>Taxable</th>
+              <th>Net</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="calculators" class="tab">
+      <div class="card">
+        <h2>Termination payout calculator</h2>
+        <div class="grid two">
+          <div>
+            <label>Employee</label>
+            <select id="termEmployee"></select>
+          </div>
+          <div>
+            <label>Termination date</label>
+            <input id="termDate" type="date" />
+          </div>
+          <div>
+            <label>Holiday days per year</label>
+            <input id="termDaysPerYear" type="number" step="0.5" />
+          </div>
+          <div>
+            <label>Used holiday days YTD</label>
+            <input id="termUsedDays" type="number" step="0.5" />
+          </div>
+        </div>
+        <button id="calcTermBtn">Calculate</button>
+        <div id="termResult"></div>
+        <p class="muted small">
+          Assumes payout equals remaining vacation hours at last hourly wage plus 8 percent holiday allowance. Numbers are gross.
+        </p>
+      </div>
+    </section>
+
+    <section id="settings" class="tab">
+      <div class="card">
+        <h2>Company settings</h2>
+        <div id="company"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <small>Prototype UI. Replace dummy data with your vendor integration later.</small>
+  </footer>
+
+  <script src="/main.js"></script>
+</body>
+</html>
