@@ -41,7 +41,7 @@ export function buildPain001 (debtor: { name: string, iban: string, bic?: string
               CdtrAcct: { Id: { IBAN: p.iban } },
               RmtInf: { Ustrd: p.remittance }
             }
-          })))
+          })) as any)
         .up()
       .up()
     .up()
