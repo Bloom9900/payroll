@@ -1,3 +1,4 @@
+import { summarizeAdjustmentsForEmployeeMonth } from './adjustmentsLedger.js';
 export const HOLIDAY_ALLOWANCE_RATE = 0.08;
 export const STATUTORY_INTEREST_RATE = 0.08;
 export const SOCIAL_SECURITY_RATE = 0.2775;
@@ -111,7 +112,8 @@ export function calculateMonthlyPayroll(input) {
     const dueDate = toDate(dueDateStr) ?? defaultPaymentDueDate(window);
     const paymentDate = toDate(paymentDateStr) ?? dueDate;
     const latePaymentFeeCents = calculateLatePaymentFee(netBeforeFeeCents, dueDate, paymentDate);
-    const netCents = netBeforeFeeCents + latePaymentFeeCents;
+    const manualAdjustments = summarizeAdjustmentsForEmployeeMonth(employee.id, month);
+    const netCents = netBeforeFeeCents + latePaymentFeeCents + manualAdjustments.netCents;
     const taxableCents = Math.max(0, grossCents + holidayAllowancePaymentCents + outstandingHolidayPayoutCents + holidayAccrualCents - ruling30Cents);
     return {
         employee,
@@ -139,7 +141,11 @@ export function calculateMonthlyPayroll(input) {
             },
             adjustments: {
                 outstandingHolidayPayoutCents,
-                latePaymentFeeCents
+                latePaymentFeeCents,
+                manualAdjustmentsCents: manualAdjustments.netCents,
+                manualAdjustmentsTaxableCents: manualAdjustments.taxableCents,
+                manualAdjustmentsBreakdown: manualAdjustments.breakdown,
+                manualAdjustmentItems: manualAdjustments.items
             },
             netCents
         },
@@ -147,7 +153,8 @@ export function calculateMonthlyPayroll(input) {
             paymentDueDate: dueDate.toISOString().slice(0, 10),
             paymentDate: paymentDate.toISOString().slice(0, 10),
             statutoryInterestRate: STATUTORY_INTEREST_RATE,
-            terminationDate: employee.endDate ?? null
+            terminationDate: employee.endDate ?? null,
+            manualAdjustmentsTaxableCents: manualAdjustments.taxableCents
         }
     };
 }

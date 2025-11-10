@@ -47,6 +47,12 @@
           </div>
         </div>
       </div>
+      <div class="card" id="riskSignals">
+        <h3>Operational risk indicators</h3>
+        <ul id="riskList" class="bullet-list">
+          <li class="muted">Load employees to see outstanding actions.</li>
+        </ul>
+      </div>
       <div class="grid">
         <div class="card">
           <h3>Quick actions</h3>
@@ -125,11 +131,35 @@
         <table id="empPreviewTable">
           <thead>
             <tr>
-              <th>Gross</th><th>Holiday</th><th>30 ruling</th><th>Taxable</th><th>Net</th>
+              <th>Gross</th><th>Holiday</th><th>30 ruling</th><th>Taxable</th><th>Adjustments</th><th>Net</th>
             </tr>
           </thead>
           <tbody></tbody>
         </table>
+        <h4>Manual adjustments</h4>
+        <div id="empAdjustments"></div>
+        <form id="empAdjustmentForm" class="grid three">
+          <label>Description<input name="description" required /></label>
+          <label>Type
+            <select name="type" required>
+              <option value="allowance">Allowance</option>
+              <option value="retro">Retro pay</option>
+              <option value="reimbursement">Reimbursement</option>
+              <option value="deduction">Deduction</option>
+            </select>
+          </label>
+          <label>Amount (€)<input name="amount" type="number" step="0.01" min="0.01" required /></label>
+          <label>Effective month<input name="effectiveMonth" type="month" required /></label>
+          <label>End month<input name="endMonth" type="month" /></label>
+          <label class="checkbox"><input type="checkbox" name="taxable" /> Taxable</label>
+          <label class="checkbox"><input type="checkbox" name="recurring" /> Recurring</label>
+          <div class="form-actions">
+            <button type="submit">Schedule adjustment</button>
+            <span id="empAdjustmentStatus" class="muted small"></span>
+          </div>
+        </form>
+        <h4>Change log</h4>
+        <ul id="empAudit" class="audit-list"></ul>
       </div>
     </section>
 
@@ -166,7 +196,14 @@
         <h2>Monthly payroll</h2>
         <div class="row">
           <input id="month" type="month" />
+          <input id="paymentDate" type="date" placeholder="Payment date" />
+          <input id="dueDate" type="date" placeholder="Cut-off date" />
+          <input id="runNote" placeholder="Internal note" />
+        </div>
+        <div class="row">
           <button id="btnPreview">Preview</button>
+          <button id="btnCaptureRun" disabled>Capture draft run</button>
+          <button id="btnCsv" disabled>Download CSV</button>
           <button id="btnSepa" disabled>Generate SEPA XML</button>
           <span id="status" class="muted"></span>
         </div>
@@ -180,11 +217,34 @@
               <th>Holiday</th>
               <th>30 ruling</th>
               <th>Taxable</th>
+              <th>Adjustments</th>
               <th>Net</th>
+              <th>Payslip</th>
             </tr>
           </thead>
           <tbody></tbody>
         </table>
+        <div id="payslipDetail" class="muted small"></div>
+      </div>
+      <div class="card">
+        <h3>Run ledger</h3>
+        <table id="runLedgerTable">
+          <thead>
+            <tr>
+              <th>Period</th>
+              <th>Status</th>
+              <th>Payment</th>
+              <th>Net</th>
+              <th>Adjustments</th>
+              <th>Updated</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td colspan="7" class="muted">No runs captured yet.</td></tr>
+          </tbody>
+        </table>
+        <div id="runMessage" class="muted small"></div>
       </div>
     </section>
 

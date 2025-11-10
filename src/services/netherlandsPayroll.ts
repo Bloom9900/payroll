@@ -1,4 +1,6 @@
 import { DummyEmployee } from '../data/dummy.js'
+import { summarizeAdjustmentsForEmployeeMonth } from './adjustmentsLedger.js'
+import type { AdjustmentRecord } from './adjustmentsLedger.js'
 
 export const HOLIDAY_ALLOWANCE_RATE = 0.08
 export const STATUTORY_INTEREST_RATE = 0.08
@@ -45,6 +47,15 @@ export type PayrollCalculationResult = {
     adjustments: {
       outstandingHolidayPayoutCents: number
       latePaymentFeeCents: number
+      manualAdjustmentsCents: number
+      manualAdjustmentsTaxableCents: number
+      manualAdjustmentsBreakdown: {
+        allowancesCents: number
+        deductionsCents: number
+        reimbursementsCents: number
+        retroCents: number
+      }
+      manualAdjustmentItems: AdjustmentRecord[]
     }
     netCents: number
   }
@@ -53,6 +64,7 @@ export type PayrollCalculationResult = {
     paymentDate: string
     statutoryInterestRate: number
     terminationDate?: string | null
+    manualAdjustmentsTaxableCents: number
   }
 }
 
@@ -181,7 +193,8 @@ export function calculateMonthlyPayroll (input: PayrollCalculationInput): Payrol
   const paymentDate = toDate(paymentDateStr) ?? dueDate
 
   const latePaymentFeeCents = calculateLatePaymentFee(netBeforeFeeCents, dueDate, paymentDate)
-  const netCents = netBeforeFeeCents + latePaymentFeeCents
+  const manualAdjustments = summarizeAdjustmentsForEmployeeMonth(employee.id, month)
+  const netCents = netBeforeFeeCents + latePaymentFeeCents + manualAdjustments.netCents
 
   const taxableCents = Math.max(0, grossCents + holidayAllowancePaymentCents + outstandingHolidayPayoutCents + holidayAccrualCents - ruling30Cents)
 
@@ -211,7 +224,11 @@ export function calculateMonthlyPayroll (input: PayrollCalculationInput): Payrol
       },
       adjustments: {
         outstandingHolidayPayoutCents,
-        latePaymentFeeCents
+        latePaymentFeeCents,
+        manualAdjustmentsCents: manualAdjustments.netCents,
+        manualAdjustmentsTaxableCents: manualAdjustments.taxableCents,
+        manualAdjustmentsBreakdown: manualAdjustments.breakdown,
+        manualAdjustmentItems: manualAdjustments.items
       },
       netCents
     },
@@ -219,7 +236,8 @@ export function calculateMonthlyPayroll (input: PayrollCalculationInput): Payrol
       paymentDueDate: dueDate.toISOString().slice(0, 10),
       paymentDate: paymentDate.toISOString().slice(0, 10),
       statutoryInterestRate: STATUTORY_INTEREST_RATE,
-      terminationDate: employee.endDate ?? null
+      terminationDate: employee.endDate ?? null,
+      manualAdjustmentsTaxableCents: manualAdjustments.taxableCents
     }
   }
 }

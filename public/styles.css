@@ -16,6 +16,7 @@ main{ padding:24px; }
 .row{ display:flex; gap:12px; align-items:center; }
 input, select{ padding:8px; border-radius:8px; border:1px solid #2a3355; background:#0e1430; color:var(--text); }
 button{ padding:10px 14px; border:0; border-radius:10px; background:var(--accent); color:#0b1021; font-weight:600; cursor:pointer; }
+button.secondary{ background:#243055; color:var(--text); }
 button[disabled]{ opacity:.5; cursor:not-allowed; }
 .muted{ color:var(--muted); }
 .small{ font-size:12px; }
@@ -41,6 +42,21 @@ th{ background:#1c2340; }
 .mix-bar-fill{ height:100%; background:var(--accent); }
 .actions{ list-style:none; margin:0; padding-left:0; display:flex; flex-direction:column; gap:6px; }
 .actions li{ background:#1b2344; border-radius:8px; padding:8px 12px; }
+.bullet-list{ margin:0; padding-left:18px; display:flex; flex-direction:column; gap:4px; }
+.audit-list{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; }
+.audit-list li{ background:#10172e; border:1px solid rgba(138,180,255,0.16); border-radius:10px; padding:10px 12px; }
+.audit-list li span{ display:block; font-size:12px; color:var(--muted); }
+#empAdjustments table{ margin-top:8px; }
+#empAdjustments .muted{ margin-bottom:8px; display:block; }
+#runLedgerTable tbody tr td:last-child{ white-space:nowrap; }
+.run-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+.badge{ display:inline-flex; align-items:center; gap:6px; padding:2px 10px; border-radius:999px; font-size:12px; background:#243055; color:var(--text); text-transform:uppercase; letter-spacing:0.5px; }
+.badge.draft{ background:rgba(138,180,255,0.18); color:var(--accent); }
+.badge.reviewed{ background:rgba(247,210,124,0.18); color:#f7d27c; }
+.badge.approved{ background:rgba(124,247,193,0.18); color:#7cf7c1; }
+.highlight-positive{ color:#7cf7c1; }
+.highlight-negative{ color:#f78c7c; }
+#payslipDetail{ margin-top:12px; line-height:1.4; }
 
 @media (max-width: 1100px){
   .grid, .grid.two, .command-grid{ grid-template-columns:1fr; }

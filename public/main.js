@@ -11,6 +11,8 @@ tabButtons.forEach(btn => {
 
 const euro = n => new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(n)
 let employeeCache = []
+let currentRunPreview = null
+let selectedEmployeeId = null
 
 // Dashboard snapshot
 async function loadSnapshot () {
@@ -25,6 +27,8 @@ loadSnapshot()
 // Runs tab
 document.getElementById('btnPreview').addEventListener('click', previewRuns)
 document.getElementById('btnSepa').addEventListener('click', sepaDownload)
+document.getElementById('btnCsv').addEventListener('click', downloadCsvReport)
+document.getElementById('btnCaptureRun').addEventListener('click', captureRun)
 document.getElementById('qaPreview').addEventListener('click', () => {
   document.querySelector('button[data-tab="runs"]').click()
   previewRuns()
@@ -37,10 +41,16 @@ document.getElementById('qaSepa').addEventListener('click', () => {
 async function previewRuns () {
   const monthEl = document.getElementById('month')
   const month = monthEl.value || new Date().toISOString().slice(0, 7)
+  const paymentDate = document.getElementById('paymentDate').value
+  const dueDate = document.getElementById('dueDate').value
   const status = document.getElementById('status')
   status.textContent = 'Loading...'
-  const res = await fetch(`/api/payroll/preview/${month}`)
+  const params = new URLSearchParams()
+  if (paymentDate) params.set('paymentDate', paymentDate)
+  if (dueDate) params.set('dueDate', dueDate)
+  const res = await fetch(`/api/payroll/preview/${month}${params.toString() ? `?${params.toString()}` : ''}`)
   const data = await res.json()
+  currentRunPreview = { ...data, month }
   const tbody = document.querySelector('#employeesTable tbody')
   tbody.innerHTML = ''
   data.employees.forEach(r => {
@@ -49,22 +59,39 @@ async function previewRuns () {
       <td>${r.employeeId}</td>
       <td>${r.name}</td>
       <td>${r.email}</td>
-      <td>${euro(r.gross)}</td>
-      <td>${euro(r.holiday)}</td>
-      <td>${euro(r.ruling30)}</td>
-      <td>${euro(r.taxable)}</td>
-      <td>${euro(r.net)}</td>
+      <td>${euro(r.summary.gross)}</td>
+      <td>${euro(r.summary.holiday)}</td>
+      <td>${euro(r.summary.ruling30)}</td>
+      <td>${euro(r.summary.taxable)}</td>
+      <td class="${r.summary.manualAdjustments >= 0 ? 'highlight-positive' : 'highlight-negative'}">${euro(r.summary.manualAdjustments)}</td>
+      <td>${euro(r.summary.net)}</td>
+      <td><button type="button" class="secondary" data-payslip="${r.employeeId}">View</button></td>
     `
     tbody.appendChild(tr)
   })
   document.getElementById('btnSepa').disabled = false
-  status.textContent = `Showing ${data.period}`
+  document.getElementById('btnCsv').disabled = false
+  document.getElementById('btnCaptureRun').disabled = false
+  document.getElementById('payslipDetail').textContent = ''
+  tbody.querySelectorAll('button[data-payslip]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      await showPayslip(month, btn.dataset.payslip, paymentDate, dueDate)
+    })
+  })
+  status.textContent = `Showing ${data.period} • Net ${euro(data.totals.net)} • Manual adjustments ${euro(data.totals.manualAdjustments)}`
+  await loadRunLedger()
 }
 
 async function sepaDownload () {
   const monthEl = document.getElementById('month')
   const month = monthEl.value || new Date().toISOString().slice(0, 7)
-  const res = await fetch(`/api/payroll/sepa/${month}`, { method: 'POST' })
+  const paymentDate = document.getElementById('paymentDate').value
+  const dueDate = document.getElementById('dueDate').value
+  const res = await fetch(`/api/payroll/sepa/${month}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ paymentDate: paymentDate || undefined, dueDate: dueDate || undefined })
+  })
   const xml = await res.text()
   const blob = new Blob([xml], { type: 'application/xml;charset=utf-8' })
   const a = document.createElement('a')
@@ -72,6 +99,163 @@ async function sepaDownload () {
   a.download = `sepa-${month}.xml`
   a.click()
   URL.revokeObjectURL(a.href)
+}
+
+async function downloadCsvReport () {
+  const month = document.getElementById('month').value || new Date().toISOString().slice(0, 7)
+  const paymentDate = document.getElementById('paymentDate').value
+  const dueDate = document.getElementById('dueDate').value
+  const params = new URLSearchParams()
+  if (paymentDate) params.set('paymentDate', paymentDate)
+  if (dueDate) params.set('dueDate', dueDate)
+  const res = await fetch(`/api/payroll/reports/${month}.csv${params.toString() ? `?${params.toString()}` : ''}`)
+  if (!res.ok) {
+    const status = document.getElementById('status')
+    status.textContent = 'Unable to download CSV report.'
+    return
+  }
+  const csv = await res.text()
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = `payroll-${month}.csv`
+  a.click()
+  URL.revokeObjectURL(a.href)
+}
+
+async function captureRun () {
+  if (!currentRunPreview) {
+    document.getElementById('status').textContent = 'Preview the period before capturing a run.'
+    return
+  }
+  const month = document.getElementById('month').value || currentRunPreview.period
+  const paymentDate = document.getElementById('paymentDate').value
+  const dueDate = document.getElementById('dueDate').value
+  const note = document.getElementById('runNote').value
+  const status = document.getElementById('status')
+  status.textContent = 'Capturing draft run...'
+  try {
+    const res = await fetch('/api/payroll/runs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ period: month, paymentDate: paymentDate || undefined, dueDate: dueDate || undefined, note: note || undefined })
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.error || 'Unable to capture run')
+    }
+    const run = await res.json()
+    status.textContent = `Run ${run.id} captured as draft.`
+    document.getElementById('runMessage').textContent = 'Draft run recorded. Use the ledger to progress approvals.'
+    await loadRunLedger()
+  } catch (err) {
+    status.textContent = err instanceof Error ? err.message : 'Unable to capture run'
+  }
+}
+
+async function loadRunLedger () {
+  const tableBody = document.querySelector('#runLedgerTable tbody')
+  if (!tableBody) return
+  try {
+    const runs = await fetch('/api/payroll/runs').then(r => r.json())
+    tableBody.innerHTML = ''
+    if (!runs.length) {
+      tableBody.innerHTML = '<tr><td colspan="7" class="muted">No runs captured yet.</td></tr>'
+      return
+    }
+    runs.forEach(run => {
+      const lastHistory = run.history[run.history.length - 1]
+      const tr = document.createElement('tr')
+      tr.innerHTML = `
+        <td>${run.period}</td>
+        <td><span class="badge ${run.status}">${run.status}</span></td>
+        <td>${run.paymentDate ?? '—'}</td>
+        <td>${euro(run.totals.net)}</td>
+        <td>${euro(run.totals.manualAdjustments)}</td>
+        <td>${new Date(lastHistory.changedAt).toLocaleString()}</td>
+        <td class="run-actions" data-run="${run.id}"></td>
+      `
+      tableBody.appendChild(tr)
+      const actionsCell = tr.querySelector('[data-run]')
+      if (run.status === 'draft') {
+        const reviewBtn = buildRunActionButton(run.id, 'reviewed', 'Mark reviewed')
+        if (reviewBtn) actionsCell.appendChild(reviewBtn)
+        const approveBtn = buildRunActionButton(run.id, 'approved', 'Approve directly')
+        if (approveBtn) actionsCell.appendChild(approveBtn)
+      } else if (run.status === 'reviewed') {
+        const approveBtn = buildRunActionButton(run.id, 'approved', 'Approve')
+        if (approveBtn) actionsCell.appendChild(approveBtn)
+      }
+      actionsCell.querySelectorAll('button[data-status]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const targetStatus = btn.dataset.status
+          if (!targetStatus) return
+          await advanceRun(run.id, targetStatus)
+        })
+      })
+    })
+  } catch (err) {
+    tableBody.innerHTML = '<tr><td colspan="7" class="muted">Unable to load run ledger.</td></tr>'
+  }
+}
+
+function buildRunActionButton (runId, status, label) {
+  if (!label) {
+    return null
+  }
+  const button = document.createElement('button')
+  button.className = 'secondary'
+  button.type = 'button'
+  button.dataset.status = status
+  button.dataset.run = runId
+  button.textContent = label
+  return button
+}
+
+async function advanceRun (runId, status) {
+  const runMessage = document.getElementById('runMessage')
+  runMessage.textContent = `Updating ${runId}...`
+  try {
+    const res = await fetch(`/api/payroll/runs/${runId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status })
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.error || 'Unable to update run status')
+    }
+    const updated = await res.json()
+    runMessage.textContent = `Run ${updated.id} moved to ${updated.status}.`
+    await loadRunLedger()
+  } catch (err) {
+    runMessage.textContent = err instanceof Error ? err.message : 'Unable to update run status'
+  }
+}
+
+async function showPayslip (month, employeeId, paymentDate, dueDate) {
+  const detail = document.getElementById('payslipDetail')
+  detail.textContent = 'Loading payslip...'
+  const params = new URLSearchParams()
+  if (paymentDate) params.set('paymentDate', paymentDate)
+  if (dueDate) params.set('dueDate', dueDate)
+  try {
+    const res = await fetch(`/api/payroll/payslip/${month}/${employeeId}${params.toString() ? `?${params.toString()}` : ''}`)
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.error || 'Unable to fetch payslip')
+    }
+    const slip = await res.json()
+    detail.innerHTML = `
+      <strong>${slip.employee.name}</strong> • ${slip.period}<br>
+      Gross ${euro(slip.gross)} • Net ${euro(slip.net)} • Adjustments ${euro(slip.adjustments.manualAdjustments)}<br>
+      Allowances: ${euro(slip.allowances.holidayAllowancePayment)} holiday, ${euro(slip.allowances.ruling30)} 30% ruling<br>
+      Deductions: ${euro(slip.deductions.wageTax)} wage tax, ${euro(slip.deductions.socialSecurity)} social security<br>
+      ${slip.notes ?? ''}
+    `
+  } catch (err) {
+    detail.textContent = err instanceof Error ? err.message : 'Unable to fetch payslip'
+  }
 }
 
 // Employee registry
@@ -110,6 +294,51 @@ if (empForm) {
   })
 }
 
+const empAdjustmentForm = document.getElementById('empAdjustmentForm')
+if (empAdjustmentForm) {
+  empAdjustmentForm.addEventListener('submit', async ev => {
+    ev.preventDefault()
+    const status = document.getElementById('empAdjustmentStatus')
+    if (!selectedEmployeeId) {
+      status.textContent = 'Select an employee first.'
+      return
+    }
+    status.textContent = 'Scheduling adjustment...'
+    const formData = new FormData(empAdjustmentForm)
+    const payload = {
+      employeeId: selectedEmployeeId,
+      description: String(formData.get('description') || ''),
+      type: String(formData.get('type') || 'allowance'),
+      amountEuros: Number(formData.get('amount') || 0),
+      effectiveMonth: String(formData.get('effectiveMonth') || ''),
+      endMonth: formData.get('endMonth') ? String(formData.get('endMonth')) : undefined,
+      taxable: formData.get('taxable') === 'on',
+      recurring: formData.get('recurring') === 'on'
+    }
+    try {
+      const res = await fetch('/api/adjustments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Unable to save adjustment')
+      }
+      empAdjustmentForm.reset()
+      const effective = empAdjustmentForm.querySelector('input[name="effectiveMonth"]')
+      if (effective) effective.value = document.getElementById('empMonth').value
+      status.textContent = 'Adjustment scheduled.'
+      await renderEmployeeAdjustments(selectedEmployeeId)
+      await renderEmployeeAudit(selectedEmployeeId)
+      await renderRiskIndicators()
+      setTimeout(() => { status.textContent = '' }, 3000)
+    } catch (err) {
+      status.textContent = err instanceof Error ? err.message : 'Unable to save adjustment'
+    }
+  })
+}
+
 async function loadEmployees () {
   const res = await fetch('/api/employees')
   employeeCache = await res.json()
@@ -118,8 +347,10 @@ async function loadEmployees () {
   populateOffboardingEmployees()
   hydrateTerminationCalculator()
   renderCommandCenter()
+  await renderRiskIndicators()
 }
 loadEmployees()
+loadRunLedger()
 
 function renderEmployeesTable (list) {
   const tbody = document.querySelector('#empTable tbody')
@@ -153,6 +384,7 @@ function renderEmployeesTable (list) {
 
 async function showEmployee (id) {
   const e = await fetch('/api/employees/' + id).then(r => r.json())
+  selectedEmployeeId = e.id
   const div = document.getElementById('empFields')
   const annual = e.annualSalaryCents / 100
   const hourly = annual / (e.hoursPerWeek * 52)
@@ -168,6 +400,9 @@ async function showEmployee (id) {
       <div><strong>Holiday days per year</strong><br>${e.holidayDaysPerYear}</div>
       <div><strong>Used holiday days YTD</strong><br>${e.usedHolidayDaysYtd}</div>
       <div><strong>30 percent ruling</strong><br>${e.isThirtyPercentRuling ? 'Yes' : 'No'}</div>
+      <div><strong>Pending expenses</strong><br>${euro((e.pendingExpenseClaimsCents ?? 0) / 100)}</div>
+      <div><strong>Record created</strong><br>${new Date(e.createdAt).toLocaleString()}</div>
+      <div><strong>Last updated</strong><br>${new Date(e.updatedAt).toLocaleString()}</div>
     </div>
   `
   document.getElementById('empDetail').hidden = false
@@ -178,18 +413,109 @@ async function showEmployee (id) {
     const row = run.employees.find(x => x.employeeId === e.id)
     const tbody = document.querySelector('#empPreviewTable tbody')
     if (!row) {
-      tbody.innerHTML = '<tr><td colspan="5">No preview available for selected month.</td></tr>'
+      tbody.innerHTML = '<tr><td colspan="6">No preview available for selected month.</td></tr>'
       return
     }
     tbody.innerHTML = `
       <tr>
-        <td>${euro(row.gross)}</td>
-        <td>${euro(row.holiday)}</td>
-        <td>${euro(row.ruling30)}</td>
-        <td>${euro(row.taxable)}</td>
-        <td>${euro(row.net)}</td>
+        <td>${euro(row.summary.gross)}</td>
+        <td>${euro(row.summary.holiday)}</td>
+        <td>${euro(row.summary.ruling30)}</td>
+        <td>${euro(row.summary.taxable)}</td>
+        <td class="${row.summary.manualAdjustments >= 0 ? 'highlight-positive' : 'highlight-negative'}">${euro(row.summary.manualAdjustments)}</td>
+        <td>${euro(row.summary.net)}</td>
       </tr>
     `
+  }
+  const adjustmentForm = document.getElementById('empAdjustmentForm')
+  if (adjustmentForm) {
+    adjustmentForm.reset()
+    const effective = adjustmentForm.querySelector('input[name="effectiveMonth"]')
+    if (effective) effective.value = document.getElementById('empMonth').value
+  }
+  await renderEmployeeAdjustments(e.id)
+  await renderEmployeeAudit(e.id)
+}
+
+async function renderEmployeeAdjustments (employeeId) {
+  const container = document.getElementById('empAdjustments')
+  if (!container) return
+  container.innerHTML = '<span class="muted">Loading adjustments...</span>'
+  try {
+    const adjustments = await fetch(`/api/adjustments?employeeId=${employeeId}`).then(r => r.json())
+    if (!adjustments.length) {
+      container.innerHTML = '<span class="muted">No manual adjustments scheduled.</span>'
+      return
+    }
+    const rows = adjustments.map(adj => {
+      const signedAmount = adj.type === 'deduction' ? -adj.amountCents : adj.amountCents
+      const friendlyType = adj.type.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+      return `
+      <tr>
+        <td>${friendlyType}</td>
+        <td>${adj.description}</td>
+        <td>${euro(signedAmount / 100)}</td>
+        <td>${adj.effectiveMonth}${adj.endMonth ? ` → ${adj.endMonth}` : ''}${adj.recurring ? ' (recurring)' : ''}</td>
+        <td>${adj.taxable ? 'Taxable' : 'Net'}</td>
+        <td><button type="button" class="secondary" data-remove="${adj.id}">Remove</button></td>
+      </tr>
+    `
+    }).join('')
+    container.innerHTML = `
+      <span class="muted">${adjustments.length} adjustment${adjustments.length === 1 ? '' : 's'} scheduled.</span>
+      <table>
+        <thead><tr><th>Type</th><th>Description</th><th>Amount</th><th>Schedule</th><th>Tax treatment</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `
+    container.querySelectorAll('button[data-remove]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        try {
+          await deleteAdjustment(btn.dataset.remove)
+          await renderEmployeeAdjustments(employeeId)
+          await renderEmployeeAudit(employeeId)
+          await renderRiskIndicators()
+        } catch (err) {
+          alert(err instanceof Error ? err.message : 'Unable to remove adjustment')
+        }
+      })
+    })
+  } catch (err) {
+    container.innerHTML = '<span class="muted">Unable to load adjustments.</span>'
+  }
+}
+
+async function deleteAdjustment (id) {
+  const res = await fetch(`/api/adjustments/${id}`, { method: 'DELETE' })
+  if (!res.ok) {
+    throw new Error('Unable to remove adjustment')
+  }
+}
+
+async function renderEmployeeAudit (employeeId) {
+  const list = document.getElementById('empAudit')
+  if (!list) return
+  list.innerHTML = '<li class="muted">Loading change log...</li>'
+  try {
+    const entries = await fetch(`/api/employees/${employeeId}/audit`).then(r => r.json())
+    if (!entries.length) {
+      list.innerHTML = '<li class="muted">No change log captured yet.</li>'
+      return
+    }
+    list.innerHTML = ''
+    entries.forEach(entry => {
+      const li = document.createElement('li')
+      const changes = entry.changes ? Object.entries(entry.changes).map(([key, change]) => `${key}: ${change.from ?? '—'} → ${change.to ?? '—'}`).join(', ') : ''
+      li.innerHTML = `
+        <strong>${entry.action}</strong> by ${entry.performedBy}<br>
+        <span>${new Date(entry.timestamp).toLocaleString()}</span><br>
+        ${entry.note ? `<span>${entry.note}</span><br>` : ''}
+        ${changes ? `<span>${changes}</span>` : ''}
+      `
+      list.appendChild(li)
+    })
+  } catch (err) {
+    list.innerHTML = '<li class="muted">Unable to load audit history.</li>'
   }
 }
 
@@ -327,6 +653,40 @@ function renderCommandCenter () {
   renderAttrition(activeEmployees)
   renderUpcomingExits(activeEmployees)
   renderActions(activeEmployees)
+}
+
+async function renderRiskIndicators () {
+  const list = document.getElementById('riskList')
+  if (!list) return
+  const items = []
+  const expenseRisks = employeeCache.filter(e => (e.pendingExpenseClaimsCents ?? 0) > 0)
+  if (expenseRisks.length) {
+    const top = expenseRisks.slice(0, 3).map(e => `${e.firstName} ${e.lastName}`)
+    items.push(`${expenseRisks.length} employee${expenseRisks.length === 1 ? '' : 's'} with reimbursable expenses pending: ${top.join(', ')}`)
+  }
+  const today = new Date()
+  const leavers = employeeCache.filter(e => e.endDate && new Date(e.endDate) >= today && new Date(e.endDate) <= addMonths(today, 1))
+  if (leavers.length) {
+    items.push(`Upcoming exits within 30 days: ${leavers.map(e => `${e.firstName} ${e.lastName} (${e.endDate})`).join(', ')}`)
+  }
+  try {
+    const month = new Date().toISOString().slice(0, 7)
+    const adjustments = await fetch(`/api/adjustments?month=${month}`).then(r => r.json())
+    if (adjustments.length) {
+      const taxableImpact = adjustments.filter(a => a.taxable).reduce((sum, a) => sum + a.amountCents, 0)
+      const recurring = adjustments.filter(a => a.recurring).length
+      items.push(`${adjustments.length} adjustment${adjustments.length === 1 ? '' : 's'} scheduled this month (${recurring} recurring). Taxable impact €${(taxableImpact / 100).toFixed(2)}.`)
+    }
+  } catch (err) {
+    if (!items.length) {
+      items.push('Unable to load adjustment impact snapshot.')
+    }
+  }
+  if (!items.length) {
+    list.innerHTML = '<li class="muted">No operational flags detected.</li>'
+    return
+  }
+  list.innerHTML = items.map(item => `<li>${item}</li>`).join('')
 }
 
 function renderForecast (activeEmployees) {

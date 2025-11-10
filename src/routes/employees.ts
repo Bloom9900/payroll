@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { addEmployee, getEmployeeById, listEmployees } from '../services/employeeRegistry.js'
+import { addEmployee, getEmployeeById, listEmployeeAudit, listEmployees } from '../services/employeeRegistry.js'
 import type { ContractType } from '../data/dummy.js'
 
 const requiredFields = [
@@ -33,9 +33,19 @@ employeesRouter.get('/', (_req, res) => {
     hoursPerWeek: e.hoursPerWeek,
     workingDaysPerWeek: e.workingDaysPerWeek,
     holidayDaysPerYear: e.holidayDaysPerYear,
-    isThirtyPercentRuling: e.isThirtyPercentRuling
+    isThirtyPercentRuling: e.isThirtyPercentRuling,
+    pendingExpenseClaimsCents: e.pendingExpenseClaimsCents,
+    createdAt: e.createdAt,
+    updatedAt: e.updatedAt
   }))
   res.json(payload)
+})
+
+employeesRouter.get('/:id/audit', (req, res) => {
+  const id = req.params.id
+  const employee = getEmployeeById(id)
+  if (!employee) return res.status(404).json({ error: 'Not found' })
+  res.json(listEmployeeAudit(id))
 })
 
 employeesRouter.get('/:id', (req, res) => {
@@ -76,6 +86,9 @@ employeesRouter.post('/', (req, res) => {
     return res.status(400).json({ error: 'holidayDaysPerYear must be a positive number' })
   }
 
+  const actorHeader = req.headers['x-actor']
+  const performedBy = Array.isArray(actorHeader) ? actorHeader[0] : typeof actorHeader === 'string' ? actorHeader : 'system'
+
   const record = addEmployee({
     id: payload.id,
     firstName: String(payload.firstName),
@@ -101,7 +114,7 @@ employeesRouter.post('/', (req, res) => {
     holidayAllowanceAccruedCentsYtd: Number(payload.holidayAllowanceAccruedCentsYtd ?? 0),
     holidayAllowancePaidCentsYtd: Number(payload.holidayAllowancePaidCentsYtd ?? 0),
     pendingExpenseClaimsCents: Number(payload.pendingExpenseClaimsCents ?? 0)
-  })
+  }, { performedBy })
 
   res.status(201).json(record)
 })
