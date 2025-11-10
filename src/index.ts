@@ -6,6 +6,7 @@ import { config } from './config.js'
 import { payroll } from './routes/payroll.js'
 import { employeesRouter } from './routes/employees.js'
 import { calculators } from './routes/calculators.js'
+import { joinersRouter } from './routes/joiners.js'
 
 const app = express()
 app.use(helmet({ contentSecurityPolicy: false })) // allow our inline script to run
@@ -21,6 +22,7 @@ app.get('/health', (_req,res)=>res.json({ ok:true }))
 app.use('/api/payroll', payroll)
 app.use('/api/employees', employeesRouter)
 app.use('/api/calculators', calculators)
+app.use('/api/joiners', joinersRouter)
 
 app.get('*', (_req,res)=>res.sendFile(path.join(publicDir,'index.html')))
 
