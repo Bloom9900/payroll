@@ -12,9 +12,11 @@
     <nav class="tabs">
       <button data-tab="dashboard" class="active">Dashboard</button>
       <button data-tab="employees">Employees</button>
+      <button data-tab="offboarding">Offboarding</button>
       <button data-tab="runs">Runs</button>
       <button data-tab="calculators">Calculators</button>
       <button data-tab="settings">Settings</button>
+      <button data-tab="command">Command Center</button>
     </nav>
   </header>
 
@@ -23,6 +25,27 @@
       <div class="card">
         <h2>Snapshot</h2>
         <div id="snapshot"></div>
+      </div>
+      <div class="card" id="headcountPulse">
+        <h3>Headcount pulse</h3>
+        <div class="pulse-grid">
+          <div>
+            <span class="pulse-value" id="pulseTotal">0</span>
+            <span class="pulse-label">Total employees</span>
+          </div>
+          <div>
+            <span class="pulse-value" id="pulseFinance">0</span>
+            <span class="pulse-label">Finance</span>
+          </div>
+          <div>
+            <span class="pulse-value" id="pulseTech">0</span>
+            <span class="pulse-label">Technology</span>
+          </div>
+          <div>
+            <span class="pulse-value" id="pulseHr">0</span>
+            <span class="pulse-label">HR & People</span>
+          </div>
+        </div>
       </div>
       <div class="grid">
         <div class="card">
@@ -43,6 +66,34 @@
     </section>
 
     <section id="employees" class="tab">
+      <div class="card">
+        <h2>Add a new employee</h2>
+        <form id="empCreateForm" class="grid two">
+          <label>First name<input name="firstName" required /></label>
+          <label>Last name<input name="lastName" required /></label>
+          <label>Email<input name="email" type="email" required /></label>
+          <label>Start date<input name="startDate" type="date" required /></label>
+          <label>Annual salary (€)<input name="annualSalaryEuros" type="number" min="0" step="100" required /></label>
+          <label>Hours per week<input name="hoursPerWeek" type="number" min="1" step="1" required /></label>
+          <label>Working days per week<input name="workingDaysPerWeek" type="number" min="1" max="5" step="0.5" required /></label>
+          <label>Department<input name="department" required /></label>
+          <label>Role<input name="role" required /></label>
+          <label>Location<input name="location" required /></label>
+          <label>Contract type
+            <select name="contractType" required>
+              <option value="permanent">Permanent</option>
+              <option value="fixed-term">Fixed term</option>
+              <option value="contractor">Contractor</option>
+            </select>
+          </label>
+          <label>Holiday days per year<input name="holidayDaysPerYear" type="number" min="1" step="0.5" value="25" /></label>
+          <label class="checkbox"><input type="checkbox" name="isThirtyPercentRuling" /> Eligible for 30% ruling</label>
+          <div class="form-actions">
+            <button type="submit">Create employee</button>
+            <span id="empCreateStatus" class="muted small"></span>
+          </div>
+        </form>
+      </div>
       <div class="card">
         <div class="row">
           <h2>Employees</h2>
@@ -79,6 +130,34 @@
           </thead>
           <tbody></tbody>
         </table>
+      </div>
+    </section>
+
+    <section id="offboarding" class="tab">
+      <div class="card">
+        <h2>Offboarding payout designer</h2>
+        <div class="grid two offboarding-grid">
+          <div>
+            <label>Employee
+              <select id="offEmployee"></select>
+            </label>
+            <label>Exit date
+              <input id="offExitDate" type="date" />
+            </label>
+            <label>Reason
+              <select id="offReason">
+                <option value="termination">Termination</option>
+                <option value="resignation">Resignation</option>
+                <option value="end-of-contract">End of contract</option>
+              </select>
+            </label>
+            <button id="offCalculate">Generate offboarding plan</button>
+            <p class="muted small">Outputs include statutory Dutch transition allowance, vacation payout and notice compensation.</p>
+          </div>
+          <div id="offSummary" class="offboarding-summary">
+            <p class="muted">Select an employee to generate a payout package.</p>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -142,6 +221,32 @@
       <div class="card">
         <h2>Company settings</h2>
         <div id="company"></div>
+      </div>
+    </section>
+
+    <section id="command" class="tab">
+      <div class="card command-hero">
+        <h2>Strategic command center</h2>
+        <p class="muted">Real-time visual cockpit combining headcount, attrition risk and payroll exposure.</p>
+        <div class="command-grid">
+          <div class="command-panel">
+            <h3>Headcount forecast</h3>
+            <canvas id="commandForecast" width="420" height="180"></canvas>
+            <small class="muted">Projection uses rolling three-month trend derived from active employees.</small>
+          </div>
+          <div class="command-panel">
+            <h3>Contract mix</h3>
+            <div class="mix-bars" id="commandMix"></div>
+            <h3>Attrition radar</h3>
+            <ul id="commandAttrition"></ul>
+          </div>
+          <div class="command-panel">
+            <h3>Upcoming exits</h3>
+            <ul id="commandExits"></ul>
+            <h3>Immediate actions</h3>
+            <ul id="commandActions" class="actions"></ul>
+          </div>
+        </div>
       </div>
     </section>
   </main>
