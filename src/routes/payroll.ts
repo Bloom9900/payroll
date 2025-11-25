@@ -1,14 +1,11 @@
 import { Router } from 'express'
 import { config } from '../config.js'
 import { buildPain001 } from '../services/sepa.js'
-import { calculateMonthlyPayroll, HOLIDAY_ALLOWANCE_RATE, SOCIAL_SECURITY_RATE, STATUTORY_INTEREST_RATE } from '../services/netherlandsPayroll.js'
+import { calculateMonthlyPayroll, HOLIDAY_ALLOWANCE_RATE, STATUTORY_INTEREST_RATE } from '../services/netherlandsPayroll.js'
 import { listEmployees } from '../services/employeeRegistry.js'
+import { centsToEuro } from '../utils/currency.js'
 
 export const payroll = Router()
-
-function centsToEuro (value: number): number {
-  return Math.round(value) / 100
-}
 
 payroll.get('/preview/:month', (req, res) => {
   try {
@@ -23,13 +20,36 @@ payroll.get('/preview/:month', (req, res) => {
       acc.gross += r.amounts.grossCents
       acc.net += r.amounts.netCents
       acc.wageTax += r.amounts.deductions.wageTaxCents
+      acc.wageTaxCredit += r.amounts.deductions.wageTaxCreditCents
       acc.socialSecurity += r.amounts.deductions.socialSecurityCents
+      acc.pensionEmployee += r.amounts.deductions.pensionEmployeeCents
+      acc.healthInsuranceEmployee += r.amounts.deductions.healthInsuranceEmployeeCents
+      acc.pensionEmployer += r.amounts.employerCosts.pensionEmployerCents
+      acc.healthInsuranceEmployer += r.amounts.employerCosts.healthInsuranceEmployerCents
+      acc.zvwEmployer += r.amounts.employerCosts.zvwEmployerCents
+      acc.totalEmployerCosts += r.amounts.employerCosts.totalEmployerCostsCents
       acc.holidayAllowancePayments += r.amounts.allowances.holidayAllowancePaymentCents
       acc.holidayAccrual += r.amounts.allowances.holidayAccrualCents
       acc.lateFees += r.amounts.adjustments.latePaymentFeeCents
       acc.outstandingHoliday += r.amounts.adjustments.outstandingHolidayPayoutCents
       return acc
-    }, { gross: 0, net: 0, wageTax: 0, socialSecurity: 0, holidayAllowancePayments: 0, holidayAccrual: 0, lateFees: 0, outstandingHoliday: 0 })
+    }, { 
+      gross: 0, 
+      net: 0, 
+      wageTax: 0, 
+      wageTaxCredit: 0,
+      socialSecurity: 0, 
+      pensionEmployee: 0,
+      healthInsuranceEmployee: 0,
+      pensionEmployer: 0,
+      healthInsuranceEmployer: 0,
+      zvwEmployer: 0,
+      totalEmployerCosts: 0,
+      holidayAllowancePayments: 0, 
+      holidayAccrual: 0, 
+      lateFees: 0, 
+      outstandingHoliday: 0 
+    })
 
     const employees = calculations.map(r => ({
       employeeId: r.employee.id,
@@ -54,8 +74,25 @@ payroll.get('/preview/:month', (req, res) => {
         },
         deductions: {
           wageTax: centsToEuro(r.amounts.deductions.wageTaxCents),
-          socialSecurity: centsToEuro(r.amounts.deductions.socialSecurityCents)
+          wageTaxCredit: centsToEuro(r.amounts.deductions.wageTaxCreditCents),
+          socialSecurity: centsToEuro(r.amounts.deductions.socialSecurityCents),
+          socialSecurityBreakdown: {
+            aow: centsToEuro(r.amounts.deductions.socialSecurityBreakdown.aowCents),
+            anw: centsToEuro(r.amounts.deductions.socialSecurityBreakdown.anwCents),
+            wlz: centsToEuro(r.amounts.deductions.socialSecurityBreakdown.wlzCents),
+            ww: centsToEuro(r.amounts.deductions.socialSecurityBreakdown.wwCents),
+            wia: centsToEuro(r.amounts.deductions.socialSecurityBreakdown.wiaCents)
+          },
+          pensionEmployee: centsToEuro(r.amounts.deductions.pensionEmployeeCents),
+          healthInsuranceEmployee: centsToEuro(r.amounts.deductions.healthInsuranceEmployeeCents)
         },
+        employerCosts: {
+          pensionEmployer: centsToEuro(r.amounts.employerCosts.pensionEmployerCents),
+          healthInsuranceEmployer: centsToEuro(r.amounts.employerCosts.healthInsuranceEmployerCents),
+          zvwEmployer: centsToEuro(r.amounts.employerCosts.zvwEmployerCents),
+          totalEmployerCosts: centsToEuro(r.amounts.employerCosts.totalEmployerCostsCents)
+        },
+        compliance: r.compliance,
         adjustments: {
           outstandingHolidayPayout: centsToEuro(r.amounts.adjustments.outstandingHolidayPayoutCents),
           latePaymentFee: centsToEuro(r.amounts.adjustments.latePaymentFeeCents)
@@ -72,7 +109,14 @@ payroll.get('/preview/:month', (req, res) => {
         gross: centsToEuro(totals.gross),
         net: centsToEuro(totals.net),
         wageTax: centsToEuro(totals.wageTax),
+        wageTaxCredit: centsToEuro(totals.wageTaxCredit),
         socialSecurity: centsToEuro(totals.socialSecurity),
+        pensionEmployee: centsToEuro(totals.pensionEmployee),
+        healthInsuranceEmployee: centsToEuro(totals.healthInsuranceEmployee),
+        pensionEmployer: centsToEuro(totals.pensionEmployer),
+        healthInsuranceEmployer: centsToEuro(totals.healthInsuranceEmployer),
+        zvwEmployer: centsToEuro(totals.zvwEmployer),
+        totalEmployerCosts: centsToEuro(totals.totalEmployerCosts),
         holidayAllowancePayments: centsToEuro(totals.holidayAllowancePayments),
         holidayAccrual: centsToEuro(totals.holidayAccrual),
         outstandingHoliday: centsToEuro(totals.outstandingHoliday),
@@ -81,8 +125,7 @@ payroll.get('/preview/:month', (req, res) => {
       employees,
       assumptions: {
         holidayAllowanceRate: HOLIDAY_ALLOWANCE_RATE,
-        taxYear: 2024,
-        socialSecurityRate: SOCIAL_SECURITY_RATE,
+        taxConfigurationPeriod: calculations[0]?.metadata.taxConfigurationPeriod ?? month,
         latePaymentInterestRate: calculations[0]?.metadata.statutoryInterestRate ?? STATUTORY_INTEREST_RATE
       }
     })

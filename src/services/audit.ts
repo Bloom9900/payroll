@@ -9,6 +9,7 @@ export type AuditEventType =
   | 'employee_updated'
   | 'employee_deleted'
   | 'sepa_file_generated'
+  | 'payslip_generated'
   | 'tax_filing_submitted'
   | 'jaaropgave_generated'
   | 'pension_submission'

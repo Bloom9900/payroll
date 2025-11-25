@@ -1,3 +1,7 @@
+// Imports
+import { getPayslipsForEmployee, getPayslipById, summarizePayslip, generatePayslipPdfHtml, generatePayslipPdfBlob } from './modules/payslip.js'
+import { listEmployees } from './modules/employees.js'
+
 // Tabs
 const tabButtons = document.querySelectorAll('nav.tabs button')
 tabButtons.forEach(btn => {
@@ -70,7 +74,7 @@ async function previewRuns () {
     tbody.innerHTML = ''
     
     if (!data.employees || data.employees.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="8" class="muted">No employees found for this period</td></tr>'
+      tbody.innerHTML = '<tr><td colspan="10" class="muted">No employees found for this period</td></tr>'
       status.textContent = `No data for ${data.period}`
       return
     }
@@ -78,20 +82,26 @@ async function previewRuns () {
     data.employees.forEach(r => {
       const tr = document.createElement('tr')
       const gross = r.amounts?.gross ?? 0
-      const holiday = r.amounts?.allowances?.holidayAccrual ?? 0
-      const ruling30 = r.amounts?.allowances?.ruling30 ?? 0
       const taxable = r.amounts?.taxable ?? 0
+      const wageTax = r.amounts?.deductions?.wageTax ?? 0
+      const wageTaxCredit = r.amounts?.deductions?.wageTaxCredit ?? 0
+      const socialSecurity = r.amounts?.deductions?.socialSecurity ?? 0
+      const pension = r.amounts?.deductions?.pensionEmployee ?? 0
       const net = r.amounts?.net ?? 0
       
       tr.innerHTML = `
         <td>${r.employeeId || ''}</td>
         <td>${r.name || ''}</td>
-        <td>${r.email || ''}</td>
         <td>${euro(gross)}</td>
-        <td>${euro(holiday)}</td>
-        <td>${euro(ruling30)}</td>
         <td>${euro(taxable)}</td>
-        <td>${euro(net)}</td>
+        <td>${euro(wageTax)}</td>
+        <td>${euro(wageTaxCredit)}</td>
+        <td>${euro(socialSecurity)}</td>
+        <td>${euro(pension)}</td>
+        <td><strong>${euro(net)}</strong></td>
+        <td>
+          <button class="secondary" style="padding:4px 8px;font-size:12px;" onclick="showEmployeeBreakdown('${r.employeeId}', '${month}')">Details</button>
+        </td>
       `
       tbody.appendChild(tr)
     })
@@ -100,7 +110,7 @@ async function previewRuns () {
   } catch (err) {
     status.textContent = err.message || 'Error loading payroll preview'
     const tbody = document.querySelector('#employeesTable tbody')
-    tbody.innerHTML = '<tr><td colspan="8" class="error">Error loading data</td></tr>'
+    tbody.innerHTML = '<tr><td colspan="10" class="error">Error loading data</td></tr>'
   }
 }
 
@@ -372,8 +382,9 @@ async function showEmployee (id) {
     modal.hidden = false
     document.body.style.overflow = 'hidden'
     
-    // Auto-load current month preview and history
+    // Auto-load current month preview, payslips, and history
     loadPayrollPreview()
+    loadEmployeePayslips(id)
     loadEmployeeHistory(id)
   } catch (err) {
     console.error('Error loading employee:', err)
@@ -400,6 +411,55 @@ function closeEmployeeModal() {
   if (modal) {
     modal.hidden = true
     document.body.style.overflow = ''
+  }
+}
+
+async function loadEmployeePayslips(employeeId) {
+  try {
+    const payslips = getPayslipsForEmployee(employeeId, 20)
+    const div = document.getElementById('employeePayslips')
+    if (!div) return
+    
+    if (payslips.length === 0) {
+      div.innerHTML = '<p class="muted small">No payslips found for this employee</p>'
+      return
+    }
+    
+    div.innerHTML = `
+      <div style="max-height:400px;overflow-y:auto;">
+        <table style="font-size:13px;width:100%;">
+          <thead>
+            <tr style="border-bottom:2px solid rgba(138,180,255,0.2);">
+              <th style="text-align:left;padding:8px 0;">Month</th>
+              <th style="text-align:left;padding:8px 0;">Gross</th>
+              <th style="text-align:left;padding:8px 0;">Net</th>
+              <th style="text-align:left;padding:8px 0;">Payment Date</th>
+              <th style="text-align:center;padding:8px 0;">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${payslips.map(p => {
+              const summary = summarizePayslip(p)
+              return `<tr style="border-bottom:1px solid rgba(138,180,255,0.1);">
+              <td style="padding:8px 0;"><strong>${summary.month}</strong></td>
+              <td style="padding:8px 0;">${euro(summary.amounts.gross)}</td>
+              <td style="padding:8px 0;"><strong>${euro(summary.amounts.net)}</strong></td>
+              <td style="padding:8px 0;">${summary.paymentDate}</td>
+              <td style="padding:8px 0;text-align:center;">
+                <button class="secondary" style="padding:4px 12px;font-size:12px;" onclick="showPayslipDetail('${p.id}')">View</button>
+              </td>
+            </tr>`
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `
+  } catch (err) {
+    console.error('Error loading employee payslips:', err)
+    const div = document.getElementById('employeePayslips')
+    if (div) {
+      div.innerHTML = '<p class="error small">Error loading payslips</p>'
+    }
   }
 }
 
@@ -457,13 +517,25 @@ function updateHeadcountPulse () {
 const offExit = document.getElementById('offExitDate')
 if (offExit) offExit.valueAsDate = new Date()
 
+let currentOffboardingSummary = null
+
 document.getElementById('offCalculate')?.addEventListener('click', async () => {
   const employeeId = document.getElementById('offEmployee').value
   const exitDate = document.getElementById('offExitDate').value
-  const reason = document.getElementById('offReason').value
+  const primaryReason = document.getElementById('offPrimaryReason').value
+  const secondaryReason = document.getElementById('offSecondaryReason').value
   const summaryDiv = document.getElementById('offSummary')
+  
+  if (!primaryReason) {
+    summaryDiv.innerHTML = '<p class="error">Please select a primary reason</p>'
+    return
+  }
+  
   summaryDiv.innerHTML = '<p class="muted">Calculating offboarding package...</p>'
-  const params = new URLSearchParams({ employeeId, exitDate, reason })
+  const params = new URLSearchParams({ employeeId, exitDate, primaryReason })
+  if (secondaryReason) {
+    params.append('secondaryReason', secondaryReason)
+  }
   try {
     const res = await fetch('/api/offboarding/summary?' + params.toString())
     if (!res.ok) {
@@ -471,25 +543,92 @@ document.getElementById('offCalculate')?.addEventListener('click', async () => {
       throw new Error(err.error || 'Unable to calculate offboarding summary')
     }
     const data = await res.json()
+    currentOffboardingSummary = data
     summaryDiv.innerHTML = `
       <h3>${data.name}</h3>
       <div class="grid two">
+        <div><strong>Hire date</strong><br>${data.startDate}</div>
         <div><strong>Exit date</strong><br>${data.exitDate}</div>
-        <div><strong>Reason</strong><br>${data.reason.replace(/-/g, ' ')}</div>
+        <div><strong>Primary reason</strong><br>${data.primaryReason}</div>
+        <div><strong>Secondary reason</strong><br>${data.secondaryReason || 'N/A'}</div>
+        <div><strong>Looncode</strong><br><code>${data.looncode}</code> - ${data.looncodeDescription}</div>
         <div><strong>Tenure</strong><br>${data.tenureMonths} months (${data.tenureYears} years)</div>
         <div><strong>Base monthly salary</strong><br>${euro(data.baseMonthlySalary)}</div>
-        <div><strong>Notice pay</strong><br>${euro(data.noticePay)}</div>
+        <div><strong>Notice pay</strong><br>${euro(data.noticePay)}<br><small class="muted">${data.noticePayExplanation}</small></div>
         <div><strong>Transition allowance</strong><br>${euro(data.transitionAllowance)}</div>
         <div><strong>Unused vacation payout</strong><br>${euro(data.unusedVacationPayout)}</div>
         <div><strong>Holiday allowance top-up</strong><br>${euro(data.holidayAllowanceTopUp)}</div>
-        <div><strong>Total gross payout</strong><br>${euro(data.totalGrossPayout)}</div>
+        <div style="grid-column:1/-1;"><strong>Total gross payout</strong><br><span style="font-size:24px;color:var(--success);">${euro(data.totalGrossPayout)}</span></div>
       </div>
       <h4>Operational notes</h4>
       <ul>${data.annotations.map(a => `<li>${a}</li>`).join('')}</ul>
     `
   } catch (err) {
-    summaryDiv.innerHTML = `<p class="muted">${err instanceof Error ? err.message : 'Unable to calculate offboarding summary'}</p>`
+    summaryDiv.innerHTML = `<p class="error">${err instanceof Error ? err.message : 'Unable to calculate offboarding summary'}</p>`
+    currentOffboardingSummary = null
   }
+})
+
+// Excel export functionality
+document.getElementById('offExportExcel')?.addEventListener('click', async () => {
+  if (!currentOffboardingSummary) {
+    alert('Please calculate an offboarding summary first')
+    return
+  }
+  
+  // Create Excel content using a simple CSV-like format that Excel can open
+  const data = currentOffboardingSummary
+  const rows = [
+    ['Offboarding Payout Calculation', ''],
+    ['Employee', data.name],
+    ['Employee ID', data.employeeId],
+    ['Hire Date', data.startDate],
+    ['Exit Date', data.exitDate],
+    ['Primary Reason', data.primaryReason],
+    ['Secondary Reason', data.secondaryReason || 'N/A'],
+    ['Looncode', data.looncode],
+    ['Looncode Description', data.looncodeDescription],
+    [''],
+    ['Calculation Details', 'Amount (EUR)'],
+    ['Tenure (Months)', data.tenureMonths],
+    ['Tenure (Years)', data.tenureYears],
+    ['Base Monthly Salary', data.baseMonthlySalary.toFixed(2)],
+    [''],
+    ['Payout Components', 'Amount (EUR)'],
+    ['Notice Pay', data.noticePay.toFixed(2)],
+    ['Notice Pay Explanation', data.noticePayExplanation],
+    ['Transition Allowance', data.transitionAllowance.toFixed(2)],
+    ['Unused Vacation Payout', data.unusedVacationPayout.toFixed(2)],
+    ['Holiday Allowance Top-up', data.holidayAllowanceTopUp.toFixed(2)],
+    ['Total Gross Payout', data.totalGrossPayout.toFixed(2)],
+    [''],
+    ['Explanations', ''],
+    ...data.annotations.map(a => ['', a])
+  ]
+  
+  // Convert to CSV format
+  const csv = rows.map(row => 
+    row.map(cell => {
+      const str = String(cell || '')
+      // Escape quotes and wrap in quotes if contains comma, quote, or newline
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`
+      }
+      return str
+    }).join(',')
+  ).join('\n')
+  
+  // Add BOM for UTF-8 Excel compatibility
+  const BOM = '\uFEFF'
+  const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `offboarding-${data.employeeId}-${data.exitDate}.csv`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 })
 
 function populateOffboardingEmployees () {
@@ -1326,6 +1465,123 @@ document.getElementById('btnRefreshAudit')?.addEventListener('click', loadAuditL
 document.getElementById('btnRecentAudit')?.addEventListener('click', loadAuditLogs)
 loadAuditLogs()
 
+// Payslips - using frontend module
+let currentPayslipId = null
+
+window.showPayslipDetail = function(payslipId) {
+  const modal = document.getElementById('payslipModal')
+  const modalTitle = document.getElementById('payslipModalTitle')
+  const pdfViewer = document.getElementById('payslipPdfViewer')
+  
+  if (!modal || !pdfViewer) return
+  
+  const payslip = getPayslipById(payslipId)
+  if (!payslip) {
+    pdfViewer.innerHTML = '<p class="error">Payslip not found</p>'
+    modal.hidden = false
+    return
+  }
+  
+  currentPayslipId = payslipId
+  
+  if (modalTitle) {
+    modalTitle.textContent = `Payslip - ${payslip.employeeName} - ${payslip.month}`
+  }
+  
+  const pdfHtml = generatePayslipPdfHtml(payslipId)
+  if (pdfHtml) {
+    pdfViewer.innerHTML = pdfHtml
+  } else {
+    pdfViewer.innerHTML = '<p class="error">Unable to generate payslip</p>'
+  }
+  
+  modal.hidden = false
+  document.body.style.overflow = 'hidden'
+}
+
+function closePayslipModal() {
+  const modal = document.getElementById('payslipModal')
+  if (modal) {
+    modal.hidden = true
+    document.body.style.overflow = ''
+    currentPayslipId = null
+  }
+}
+
+function downloadPayslip() {
+  if (!currentPayslipId) return
+  
+  const blob = generatePayslipPdfBlob(currentPayslipId)
+  if (!blob) {
+    alert('Unable to generate payslip for download')
+    return
+  }
+  
+  const payslip = getPayslipById(currentPayslipId)
+  const fileName = `payslip-${payslip ? payslip.month : 'unknown'}.html`
+  
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = fileName
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+function printPayslip() {
+  if (!currentPayslipId) return
+  
+  const pdfHtml = generatePayslipPdfHtml(currentPayslipId)
+  if (!pdfHtml) {
+    alert('Unable to generate payslip for printing')
+    return
+  }
+  
+  const printWindow = window.open('', '_blank')
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>Payslip - Print</title>
+      <style>
+        @media print {
+          body { margin: 0; }
+          @page { margin: 20mm; }
+        }
+      </style>
+    </head>
+    <body>
+      ${pdfHtml}
+    </body>
+    </html>
+  `)
+  printWindow.document.close()
+  printWindow.focus()
+  setTimeout(() => {
+    printWindow.print()
+  }, 250)
+}
+
+// Close modal handlers
+document.getElementById('closePayslipModal')?.addEventListener('click', closePayslipModal)
+document.getElementById('payslipModalOverlay')?.addEventListener('click', closePayslipModal)
+document.getElementById('btnDownloadPayslip')?.addEventListener('click', downloadPayslip)
+document.getElementById('btnPrintPayslip')?.addEventListener('click', printPayslip)
+
+// Close on Escape key
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const modal = document.getElementById('payslipModal')
+    if (modal && !modal.hidden) {
+      closePayslipModal()
+    }
+  }
+})
+
+
 // Helpers
 function addMonths (date, delta) {
   const d = new Date(date.getTime())
@@ -1340,3 +1596,371 @@ function monthsBetween (start, end) {
   const dayAdjust = (end.getDate() - start.getDate()) / 30
   return Math.max(0, Math.round((total + dayAdjust) * 10) / 10)
 }
+
+// Rates Management UI
+document.getElementById('btnViewTaxTables')?.addEventListener('click', async () => {
+  try {
+    const res = await fetch('/api/rates/tax-tables')
+    const data = await res.json()
+    const div = document.getElementById('taxTablesList')
+    if (!div) return
+    
+    if (!data.taxTables || data.taxTables.length === 0) {
+      div.innerHTML = '<p class="muted">No tax tables found</p>'
+      return
+    }
+    
+    div.innerHTML = `
+      <h4>Tax Tables (${data.taxTables.length})</h4>
+      <table style="font-size:13px;">
+        <thead><tr><th>Period</th><th>Table Type</th><th>Bracket Low</th><th>Bracket High</th><th>Rate</th></tr></thead>
+        <tbody>
+          ${data.taxTables.slice(0, 10).map(t => `
+            <tr>
+              <td>${t.periodStart} to ${t.periodEnd}</td>
+              <td>${t.tableType}</td>
+              <td>${euro(t.bracketLow)}</td>
+              <td>${t.bracketHigh === Number.POSITIVE_INFINITY ? '∞' : euro(t.bracketHigh)}</td>
+              <td>${(t.rate * 100).toFixed(2)}%</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `
+  } catch (err) {
+    console.error('Error loading tax tables:', err)
+  }
+})
+
+document.getElementById('btnCheckCoverage')?.addEventListener('click', async () => {
+  const start = document.getElementById('coverageStart')?.value
+  const end = document.getElementById('coverageEnd')?.value
+  const div = document.getElementById('coverageResult')
+  if (!div || !start || !end) return
+  
+  try {
+    const res = await fetch(`/api/rates/coverage/${start}/${end}`)
+    const data = await res.json()
+    
+    div.innerHTML = `
+      <div class="${data.covered ? 'success' : 'warning'}" style="padding:12px;border-radius:6px;">
+        <strong>Coverage Status:</strong> ${data.covered ? '✓ Complete' : '✗ Incomplete'}
+      </div>
+      ${data.missing.length > 0 ? `
+        <h4 style="margin-top:16px;">Missing Rates:</h4>
+        <ul>
+          ${data.missing.map(m => `<li>${m}</li>`).join('')}
+        </ul>
+      ` : ''}
+      ${data.warnings.length > 0 ? `
+        <h4 style="margin-top:16px;">Warnings:</h4>
+        <ul>
+          ${data.warnings.map(w => `<li>${w}</li>`).join('')}
+        </ul>
+      ` : ''}
+    `
+  } catch (err) {
+    div.innerHTML = `<p class="error">Error checking coverage: ${err.message}</p>`
+  }
+})
+
+// Import Tax Table from Excel
+document.getElementById('btnImportTaxTable')?.addEventListener('click', async () => {
+  const fileInput = document.getElementById('taxTableFileInput')
+  const periodStartInput = document.getElementById('taxTablePeriodStart')
+  const periodEndInput = document.getElementById('taxTablePeriodEnd')
+  const tableTypeInput = document.getElementById('taxTableType')
+  const taxYearInput = document.getElementById('taxTableYear')
+  const resultDiv = document.getElementById('taxTableImportResult')
+  
+  if (!fileInput || !periodStartInput || !periodEndInput || !tableTypeInput || !resultDiv) return
+  
+  const file = fileInput.files?.[0]
+  if (!file) {
+    resultDiv.innerHTML = '<p class="error">Please select an Excel file</p>'
+    return
+  }
+  
+  const periodStart = periodStartInput.value
+  const periodEnd = periodEndInput.value
+  if (!periodStart || !periodEnd) {
+    resultDiv.innerHTML = '<p class="error">Please provide period start and end dates</p>'
+    return
+  }
+  
+  // Format dates as YYYY-MM-DD
+  const startDate = new Date(periodStart)
+  const endDate = new Date(periodEnd)
+  const formattedStart = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`
+  const formattedEnd = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`
+  
+  const tableType = tableTypeInput.value
+  const taxYear = taxYearInput.value ? parseInt(taxYearInput.value) : undefined
+  
+  try {
+    resultDiv.innerHTML = '<p>Uploading and parsing Excel file...</p>'
+    
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('periodStart', formattedStart)
+    formData.append('periodEnd', formattedEnd)
+    formData.append('tableType', tableType)
+    if (taxYear) {
+      formData.append('taxYear', taxYear.toString())
+    }
+    
+    const res = await fetch('/api/rates/tax-tables/import-excel', {
+      method: 'POST',
+      body: formData
+    })
+    
+    const data = await res.json()
+    
+    if (!res.ok) {
+      resultDiv.innerHTML = `
+        <div class="error" style="padding:12px;border-radius:6px;">
+          <strong>Import Failed:</strong> ${data.error || 'Unknown error'}
+          ${data.errors && data.errors.length > 0 ? `
+            <h4 style="margin-top:12px;">Errors:</h4>
+            <ul>
+              ${data.errors.map(e => `<li>${e}</li>`).join('')}
+            </ul>
+          ` : ''}
+          ${data.warnings && data.warnings.length > 0 ? `
+            <h4 style="margin-top:12px;">Warnings:</h4>
+            <ul>
+              ${data.warnings.map(w => `<li>${w}</li>`).join('')}
+            </ul>
+          ` : ''}
+        </div>
+      `
+      return
+    }
+    
+    resultDiv.innerHTML = `
+      <div class="success" style="padding:12px;border-radius:6px;">
+        <strong>Import Successful!</strong>
+        <p>Imported ${data.imported} of ${data.total} tax table entries</p>
+        ${data.warnings && data.warnings.length > 0 ? `
+          <h4 style="margin-top:12px;">Warnings:</h4>
+          <ul>
+            ${data.warnings.map(w => `<li>${w}</li>`).join('')}
+          </ul>
+        ` : ''}
+        ${data.errors && data.errors.length > 0 ? `
+          <h4 style="margin-top:12px;">Errors:</h4>
+          <ul>
+            ${data.errors.map(e => `<li>${e}</li>`).join('')}
+          </ul>
+        ` : ''}
+      </div>
+    `
+    
+    // Clear file input
+    fileInput.value = ''
+  } catch (err) {
+    resultDiv.innerHTML = `<p class="error">Error importing tax table: ${err.message}</p>`
+  }
+})
+
+// Loonaangifte UI
+document.getElementById('btnCreateLoonaangifteBatch')?.addEventListener('click', async () => {
+  const month = document.getElementById('loonaangifteMonth')?.value
+  const div = document.getElementById('loonaangifteResults')
+  if (!div || !month) return
+  
+  try {
+    const res = await fetch('/api/loonaangifte/batches', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ period: month, createdBy: 'user' })
+    })
+    
+    if (!res.ok) throw new Error('Failed to create batch')
+    const data = await res.json()
+    
+    div.innerHTML = `
+      <div class="success" style="padding:12px;border-radius:6px;">
+        <strong>Batch Created:</strong> ${data.batch.id}<br>
+        <strong>Period:</strong> ${data.batch.period}<br>
+        <strong>Status:</strong> ${data.batch.status}
+      </div>
+    `
+    
+    await loadLoonaangifteBatches()
+  } catch (err) {
+    div.innerHTML = `<p class="error">Error: ${err.message}</p>`
+  }
+})
+
+async function loadLoonaangifteBatches() {
+  try {
+    const res = await fetch('/api/loonaangifte/batches')
+    const data = await res.json()
+    const div = document.getElementById('loonaangifteBatches')
+    if (!div) return
+    
+    if (!data.batches || data.batches.length === 0) {
+      div.innerHTML = '<p class="muted">No Loonaangifte batches found</p>'
+      return
+    }
+    
+    div.innerHTML = `
+      <h4>Loonaangifte Batches</h4>
+      <table style="font-size:13px;">
+        <thead><tr><th>Period</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
+        <tbody>
+          ${data.batches.map(b => `
+            <tr>
+              <td>${b.period}</td>
+              <td><span class="status-badge ${b.status}">${b.status.toUpperCase()}</span></td>
+              <td>${new Date(b.createdAt).toLocaleDateString('nl-NL')}</td>
+              <td>
+                <button class="secondary" style="padding:4px 8px;font-size:12px;" onclick="viewLoonaangifteBatch('${b.id}')">View</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `
+  } catch (err) {
+    console.error('Error loading batches:', err)
+  }
+}
+
+window.viewLoonaangifteBatch = async function(batchId) {
+  try {
+    const res = await fetch(`/api/loonaangifte/batches/${batchId}`)
+    const data = await res.json()
+    const div = document.getElementById('loonaangifteResults')
+    if (!div) return
+    
+    const validation = data.validationReport
+    div.innerHTML = `
+      <h4>Batch Details: ${data.batch.id}</h4>
+      <div class="grid two" style="margin:16px 0;">
+        <div><strong>Period:</strong> ${data.batch.period}</div>
+        <div><strong>Status:</strong> <span class="status-badge ${data.batch.status}">${data.batch.status.toUpperCase()}</span></div>
+        <div><strong>Documents:</strong> ${data.documents.length}</div>
+        <div><strong>Valid:</strong> ${validation.valid ? '✓ Yes' : '✗ No'}</div>
+      </div>
+      ${validation.errors.length > 0 ? `
+        <h5>Errors:</h5>
+        <ul>
+          ${validation.errors.map(e => `<li class="error">${e}</li>`).join('')}
+        </ul>
+      ` : ''}
+      ${validation.warnings.length > 0 ? `
+        <h5>Warnings:</h5>
+        <ul>
+          ${validation.warnings.map(w => `<li class="warning">${w}</li>`).join('')}
+        </ul>
+      ` : ''}
+    `
+  } catch (err) {
+    console.error('Error viewing batch:', err)
+  }
+}
+
+// Enhanced payroll preview with detailed breakdown
+
+window.showEmployeeBreakdown = async function(employeeId, month) {
+  try {
+    const res = await fetch(`/api/payroll/preview/${month}`)
+    const data = await res.json()
+    const employee = data.employees.find(e => e.employeeId === employeeId)
+    if (!employee) return
+    
+    const modal = document.getElementById('payrollDetailModal')
+    const modalTitle = document.getElementById('payrollDetailModalTitle')
+    const modalContent = document.getElementById('payrollDetailModalContent')
+    if (!modal || !modalContent) return
+    
+    if (modalTitle) {
+      modalTitle.textContent = `${employee.name} - ${month}`
+    }
+    
+    modalContent.innerHTML = `
+      <div class="grid two" style="margin:16px 0;">
+        <div>
+          <h5>Earnings</h5>
+          <table style="font-size:13px;">
+            <tr><td>Gross Salary:</td><td><strong>${euro(employee.amounts.gross)}</strong></td></tr>
+            <tr><td>Holiday Allowance:</td><td>${euro(employee.amounts.allowances.holidayAccrual)}</td></tr>
+            <tr><td>30% Ruling Reduction:</td><td>${euro(employee.amounts.allowances.ruling30)}</td></tr>
+            <tr><td>Taxable Wage:</td><td><strong>${euro(employee.amounts.taxable)}</strong></td></tr>
+          </table>
+        </div>
+        <div>
+          <h5>Deductions</h5>
+          <table style="font-size:13px;">
+            <tr><td>Wage Tax:</td><td>${euro(employee.amounts.deductions.wageTax)}</td></tr>
+            <tr><td>Wage Tax Credit:</td><td>-${euro(employee.amounts.deductions.wageTaxCredit)}</td></tr>
+            <tr><td>Social Security:</td><td>${euro(employee.amounts.deductions.socialSecurity)}</td></tr>
+            <tr><td>Pension (Employee):</td><td>${euro(employee.amounts.deductions.pensionEmployee)}</td></tr>
+            <tr><td>Health Insurance:</td><td>${euro(employee.amounts.deductions.healthInsuranceEmployee)}</td></tr>
+            <tr><td><strong>Net Pay:</strong></td><td><strong style="color:var(--success);font-size:16px;">${euro(employee.amounts.net)}</strong></td></tr>
+          </table>
+        </div>
+        <div>
+          <h5>Social Security Breakdown</h5>
+          <table style="font-size:13px;">
+            <tr><td>AOW:</td><td>${euro(employee.amounts.deductions.socialSecurityBreakdown?.aow || 0)}</td></tr>
+            <tr><td>ANW:</td><td>${euro(employee.amounts.deductions.socialSecurityBreakdown?.anw || 0)}</td></tr>
+            <tr><td>WLZ:</td><td>${euro(employee.amounts.deductions.socialSecurityBreakdown?.wlz || 0)}</td></tr>
+            <tr><td>WW:</td><td>${euro(employee.amounts.deductions.socialSecurityBreakdown?.ww || 0)}</td></tr>
+            <tr><td>WIA:</td><td>${euro(employee.amounts.deductions.socialSecurityBreakdown?.wia || 0)}</td></tr>
+          </table>
+        </div>
+        <div>
+          <h5>Employer Costs</h5>
+          <table style="font-size:13px;">
+            <tr><td>Pension (Employer):</td><td>${euro(employee.amounts.employerCosts?.pensionEmployer || 0)}</td></tr>
+            <tr><td>Health Insurance (Employer):</td><td>${euro(employee.amounts.employerCosts?.healthInsuranceEmployer || 0)}</td></tr>
+            <tr><td>ZVW (Employer):</td><td>${euro(employee.amounts.employerCosts?.zvwEmployer || 0)}</td></tr>
+            <tr><td><strong>Total Employer Costs:</strong></td><td><strong>${euro(employee.amounts.employerCosts?.totalEmployerCosts || 0)}</strong></td></tr>
+          </table>
+        </div>
+      </div>
+      ${employee.compliance ? `
+        <div style="margin-top:16px;padding:12px;background:${employee.compliance.minimumWage.compliant ? 'rgba(0,255,0,0.1)' : 'rgba(255,0,0,0.1)'};border-radius:6px;">
+          <strong>Minimum Wage Compliance:</strong> ${employee.compliance.minimumWage.compliant ? '✓ Compliant' : '✗ Non-compliant'}
+          ${!employee.compliance.minimumWage.compliant ? `<br>Shortfall: ${euro(employee.compliance.minimumWage.shortfall)}` : ''}
+        </div>
+      ` : ''}
+    `
+    
+    modal.hidden = false
+    document.body.style.overflow = 'hidden'
+  } catch (err) {
+    console.error('Error loading breakdown:', err)
+    if (modalContent) {
+      modalContent.innerHTML = '<p class="error">Error loading payroll detail</p>'
+    }
+  }
+}
+
+// Close payroll detail modal handlers
+document.getElementById('closePayrollDetailModal')?.addEventListener('click', closePayrollDetailModal)
+document.getElementById('payrollDetailModalOverlay')?.addEventListener('click', closePayrollDetailModal)
+
+function closePayrollDetailModal() {
+  const modal = document.getElementById('payrollDetailModal')
+  if (modal) {
+    modal.hidden = true
+    document.body.style.overflow = ''
+  }
+}
+
+// Close on Escape key for payroll detail modal
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const modal = document.getElementById('payrollDetailModal')
+    if (modal && !modal.hidden) {
+      closePayrollDetailModal()
+    }
+  }
+})
+
+// Load Loonaangifte batches on page load
+loadLoonaangifteBatches()

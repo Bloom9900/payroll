@@ -14,12 +14,9 @@ import { buildPain001 } from '../services/sepa.js'
 import { config } from '../config.js'
 import { listEmployees } from '../services/employeeRegistry.js'
 import { calculateMonthlyPayroll } from '../services/netherlandsPayroll.js'
+import { centsToEuro } from '../utils/currency.js'
 
 export const payrollRunsRouter = Router()
-
-function centsToEuro(value: number): number {
-  return Math.round(value) / 100
-}
 
 // List all payroll runs
 payrollRunsRouter.get('/', (req, res) => {

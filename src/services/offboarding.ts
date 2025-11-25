@@ -1,24 +1,44 @@
 import { getEmployeeById } from './employeeRegistry.js'
+import { round2 } from '../utils/currency.js'
 
 export type OffboardingReason = 'termination' | 'resignation' | 'end-of-contract'
+
+export type OffboardingPrimaryReason = 'termination' | 'resignation'
+export type OffboardingSecondaryReason = 'misconduct' | 'end-of-contract' | 'mutual-agreement' | 'redundancy' | 'retirement' | 'other'
+
+// Looncode mapping for Dutch payroll reporting
+export const LOONCODE_MAP: Record<string, { code: string, description: string }> = {
+  'termination-misconduct': { code: '011', description: 'Ontslag op staande voet (Dismissal for cause)' },
+  'termination-redundancy': { code: '012', description: 'Ontslag wegens bedrijfseconomische redenen (Redundancy)' },
+  'termination-mutual-agreement': { code: '013', description: 'Ontslag in onderling overleg (Mutual agreement)' },
+  'termination-other': { code: '014', description: 'Ontslag anders (Other dismissal)' },
+  'resignation-end-of-contract': { code: '021', description: 'Einde contract (End of contract)' },
+  'resignation-retirement': { code: '022', description: 'Pensioen (Retirement)' },
+  'resignation-other': { code: '023', description: 'Eigen opzegging anders (Other resignation)' }
+}
 
 export interface OffboardingInput {
   employeeId: string
   exitDate: string
-  reason: OffboardingReason
+  primaryReason: OffboardingPrimaryReason
+  secondaryReason?: OffboardingSecondaryReason
   includeHolidayPayout?: boolean
 }
 
 export interface OffboardingSummary {
   employeeId: string
   name: string
-  reason: OffboardingReason
+  primaryReason: OffboardingPrimaryReason
+  secondaryReason?: OffboardingSecondaryReason
+  looncode: string
+  looncodeDescription: string
   exitDate: string
   startDate: string
   tenureMonths: number
   tenureYears: number
   baseMonthlySalary: number
   noticePay: number
+  noticePayExplanation: string
   transitionAllowance: number
   unusedVacationPayout: number
   holidayAllowanceTopUp: number
@@ -45,14 +65,24 @@ export function calculateOffboardingSummary (input: OffboardingInput): Offboardi
   const tenureYears = round2(tenureMonths / 12)
 
   const noticePay = calculateNoticePay(employee.contractType, baseMonthlySalary, tenureMonths)
-  const transitionAllowance = calculateTransitionAllowance(baseMonthlySalary, tenureMonths, input.reason)
+  const transitionAllowance = calculateTransitionAllowance(baseMonthlySalary, tenureMonths, input.primaryReason)
 
   const { unusedVacationPayout, holidayAllowanceTopUp } = calculateVacationPayout(employee, exitDate, input.includeHolidayPayout !== false)
 
   const totalGrossPayout = round2(noticePay + transitionAllowance + unusedVacationPayout + holidayAllowanceTopUp)
 
+  // Determine looncode based on primary and secondary reasons
+  const reasonKey = `${input.primaryReason}-${input.secondaryReason || 'other'}`
+  const looncodeInfo = LOONCODE_MAP[reasonKey] || LOONCODE_MAP[`${input.primaryReason}-other`] || { code: '000', description: 'Onbekend (Unknown)' }
+
+  // Notice pay explanation
+  const noticePayExplanation = noticePay > 0
+    ? `Notice pay is compensation for the notice period. Based on tenure: ${tenureMonths < 12 ? '0.5 months' : tenureMonths < 36 ? '1 month' : '2 months'} notice period applies.`
+    : 'No notice pay applicable (contractor or insufficient tenure).'
+
   const annotations: string[] = []
   annotations.push(`Tenure ${tenureMonths} months (${tenureYears} years)`)
+  annotations.push(`Hire date: ${employee.startDate}`)
   if (transitionAllowance > 0) {
     annotations.push('Includes Dutch statutory transition allowance (1/3 monthly salary per year served).')
   } else {
@@ -66,17 +96,22 @@ export function calculateOffboardingSummary (input: OffboardingInput): Offboardi
   if (employee.isThirtyPercentRuling) {
     annotations.push('Employee currently under 30% ruling—ensure to deregister with tax authorities.')
   }
+  annotations.push(`Looncode: ${looncodeInfo.code} - ${looncodeInfo.description}`)
 
   return {
     employeeId: employee.id,
     name: `${employee.firstName} ${employee.lastName}`,
-    reason: input.reason,
+    primaryReason: input.primaryReason,
+    secondaryReason: input.secondaryReason,
+    looncode: looncodeInfo.code,
+    looncodeDescription: looncodeInfo.description,
     exitDate: input.exitDate,
     startDate: employee.startDate,
     tenureMonths,
     tenureYears,
     baseMonthlySalary,
     noticePay,
+    noticePayExplanation,
     transitionAllowance,
     unusedVacationPayout,
     holidayAllowanceTopUp,
@@ -92,7 +127,7 @@ function calculateNoticePay (contractType: string, baseMonthlySalary: number, te
   return round2(baseMonthlySalary * 2)
 }
 
-function calculateTransitionAllowance (baseMonthlySalary: number, tenureMonths: number, reason: OffboardingReason): number {
+function calculateTransitionAllowance (baseMonthlySalary: number, tenureMonths: number, reason: OffboardingPrimaryReason): number {
   if (reason === 'resignation') return 0
   if (tenureMonths < 1) return 0
   const monthlyPortion = baseMonthlySalary / 3
@@ -128,6 +163,3 @@ function isLeapYear (year: number): boolean {
   return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0
 }
 
-function round2 (value: number): number {
-  return Math.round(value * 100) / 100
-}

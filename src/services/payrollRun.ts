@@ -1,5 +1,6 @@
 import { calculateMonthlyPayroll, type PayrollCalculationResult } from './netherlandsPayroll.js'
 import { listEmployees } from './employeeRegistry.js'
+import { centsToEuro } from '../utils/currency.js'
 
 export type PayrollRunStatus = 'pending' | 'approved' | 'rejected' | 'completed'
 
@@ -18,17 +19,20 @@ export type PayrollRun = {
     grossCents: number
     netCents: number
     wageTaxCents: number
+    wageTaxCreditCents: number
     socialSecurityCents: number
+    pensionEmployeeCents: number
+    healthInsuranceEmployeeCents: number
+    pensionEmployerCents: number
+    healthInsuranceEmployerCents: number
+    zvwEmployerCents: number
+    totalEmployerCostsCents: number
     holidayAllowancePaymentsCents: number
     outstandingHolidayPayoutCents: number
   }
 }
 
 const payrollRuns: PayrollRun[] = []
-
-function centsToEuro(value: number): number {
-  return Math.round(value) / 100
-}
 
 export function createPayrollRun(month: string): PayrollRun {
   const employees = listEmployees()
@@ -42,7 +46,14 @@ export function createPayrollRun(month: string): PayrollRun {
     acc.grossCents += r.amounts.grossCents
     acc.netCents += r.amounts.netCents
     acc.wageTaxCents += r.amounts.deductions.wageTaxCents
+    acc.wageTaxCreditCents += r.amounts.deductions.wageTaxCreditCents
     acc.socialSecurityCents += r.amounts.deductions.socialSecurityCents
+    acc.pensionEmployeeCents += r.amounts.deductions.pensionEmployeeCents
+    acc.healthInsuranceEmployeeCents += r.amounts.deductions.healthInsuranceEmployeeCents
+    acc.pensionEmployerCents += r.amounts.employerCosts.pensionEmployerCents
+    acc.healthInsuranceEmployerCents += r.amounts.employerCosts.healthInsuranceEmployerCents
+    acc.zvwEmployerCents += r.amounts.employerCosts.zvwEmployerCents
+    acc.totalEmployerCostsCents += r.amounts.employerCosts.totalEmployerCostsCents
     acc.holidayAllowancePaymentsCents += r.amounts.allowances.holidayAllowancePaymentCents
     acc.outstandingHolidayPayoutCents += r.amounts.adjustments.outstandingHolidayPayoutCents
     return acc
@@ -50,7 +61,14 @@ export function createPayrollRun(month: string): PayrollRun {
     grossCents: 0,
     netCents: 0,
     wageTaxCents: 0,
+    wageTaxCreditCents: 0,
     socialSecurityCents: 0,
+    pensionEmployeeCents: 0,
+    healthInsuranceEmployeeCents: 0,
+    pensionEmployerCents: 0,
+    healthInsuranceEmployerCents: 0,
+    zvwEmployerCents: 0,
+    totalEmployerCostsCents: 0,
     holidayAllowancePaymentsCents: 0,
     outstandingHolidayPayoutCents: 0
   })
@@ -134,7 +152,14 @@ export function getPayrollRunSummary(run: PayrollRun) {
       gross: centsToEuro(run.totals.grossCents),
       net: centsToEuro(run.totals.netCents),
       wageTax: centsToEuro(run.totals.wageTaxCents),
+      wageTaxCredit: centsToEuro(run.totals.wageTaxCreditCents),
       socialSecurity: centsToEuro(run.totals.socialSecurityCents),
+      pensionEmployee: centsToEuro(run.totals.pensionEmployeeCents),
+      healthInsuranceEmployee: centsToEuro(run.totals.healthInsuranceEmployeeCents),
+      pensionEmployer: centsToEuro(run.totals.pensionEmployerCents),
+      healthInsuranceEmployer: centsToEuro(run.totals.healthInsuranceEmployerCents),
+      zvwEmployer: centsToEuro(run.totals.zvwEmployerCents),
+      totalEmployerCosts: centsToEuro(run.totals.totalEmployerCostsCents),
       holidayAllowancePayments: centsToEuro(run.totals.holidayAllowancePaymentsCents),
       outstandingHolidayPayout: centsToEuro(run.totals.outstandingHolidayPayoutCents)
     },

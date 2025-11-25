@@ -16,6 +16,9 @@ import { healthInsuranceRouter } from './routes/healthInsurance.js'
 import { jaaropgaveRouter } from './routes/jaaropgave.js'
 import { taxFilingRouter } from './routes/taxFiling.js'
 import { employeeHistoryRouter } from './routes/employeeHistory.js'
+import { taxConfigurationRouter } from './routes/taxConfiguration.js'
+import { ratesRouter } from './routes/rates.js'
+import { loonaangifteRouter } from './routes/loonaangifte.js'
 import { startScheduler } from './services/scheduler.js'
 
 const app = express()
@@ -45,13 +48,29 @@ app.use('/api/health-insurance', healthInsuranceRouter)
 app.use('/api/jaaropgave', jaaropgaveRouter)
 app.use('/api/tax-filing', taxFilingRouter)
 app.use('/api/employee-history', employeeHistoryRouter)
+app.use('/api/tax-configuration', taxConfigurationRouter)
+app.use('/api/rates', ratesRouter)
+app.use('/api/loonaangifte', loonaangifteRouter)
 
 app.get('*', (_req,res)=>res.sendFile(path.join(publicDir,'index.html')))
 
-// Start scheduler
-startScheduler()
+// Start scheduler only if not in serverless environment (Vercel)
+// On Vercel, use cron jobs instead (see vercel.json and api/index.ts)
+if (!process.env.VERCEL) {
+  startScheduler()
+}
 
-app.listen(config.port, ()=> {
-  console.log('Server on port ' + config.port)
-  console.log('Payroll scheduler started')
-})
+// Only start listening if not in serverless environment
+if (!process.env.VERCEL) {
+  app.listen(config.port, () => {
+    console.log('Server on port ' + config.port)
+    if (!process.env.VERCEL) {
+      console.log('Payroll scheduler started')
+    } else {
+      console.log('Running on Vercel - scheduler uses cron jobs')
+    }
+  })
+}
+
+// Export app for potential serverless use
+export default app

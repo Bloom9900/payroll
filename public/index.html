@@ -14,7 +14,6 @@
       <button data-tab="employees">Employees</button>
       <button data-tab="offboarding">Offboarding</button>
       <button data-tab="runs">Payroll Runs</button>
-      <button data-tab="calculators">Calculators</button>
       <button data-tab="compliance">Compliance</button>
       <button data-tab="mock-services">Mock Services</button>
       <button data-tab="audit">Audit Log</button>
@@ -151,20 +150,59 @@
             <label>Exit date
               <input id="offExitDate" type="date" />
             </label>
-            <label>Reason
-              <select id="offReason">
+            <label>Primary Reason
+              <select id="offPrimaryReason" required>
+                <option value="">Select...</option>
                 <option value="termination">Termination</option>
                 <option value="resignation">Resignation</option>
+              </select>
+            </label>
+            <label>Secondary Reason
+              <select id="offSecondaryReason">
+                <option value="">Select...</option>
+                <option value="misconduct">Misconduct</option>
                 <option value="end-of-contract">End of contract</option>
+                <option value="mutual-agreement">Mutual agreement</option>
+                <option value="redundancy">Redundancy</option>
+                <option value="retirement">Retirement</option>
+                <option value="other">Other</option>
               </select>
             </label>
             <button id="offCalculate">Generate offboarding plan</button>
-            <p class="muted small">Outputs include statutory Dutch transition allowance, vacation payout and notice compensation.</p>
+            <button id="offExportExcel" class="secondary" style="margin-top:8px;">Export to Excel</button>
+            <p class="muted small">Outputs include statutory Dutch transition allowance, vacation payout and notice compensation. Includes looncode mapping for government reporting.</p>
           </div>
           <div id="offSummary" class="offboarding-summary">
             <p class="muted">Select an employee to generate a payout package.</p>
           </div>
         </div>
+      </div>
+      <div class="card" style="margin-top:16px;">
+        <h3>Termination payout calculator</h3>
+        <p class="muted small">Calculate vacation payout for termination scenarios</p>
+        <div class="grid two">
+          <div>
+            <label>Employee</label>
+            <select id="termEmployee"></select>
+          </div>
+          <div>
+            <label>Termination date</label>
+            <input id="termDate" type="date" />
+          </div>
+          <div>
+            <label>Holiday days per year</label>
+            <input id="termDaysPerYear" type="number" step="0.5" />
+          </div>
+          <div>
+            <label>Used holiday days YTD</label>
+            <input id="termUsedDays" type="number" step="0.5" />
+          </div>
+        </div>
+        <button id="calcTermBtn">Calculate</button>
+        <div id="termResult"></div>
+        <p class="muted small">
+          Assumes payout equals remaining vacation hours at last hourly wage plus 8 percent holiday allowance. Numbers are gross.
+        </p>
       </div>
     </section>
 
@@ -202,18 +240,20 @@
       </div>
       <div class="card">
         <h3>Payroll Preview</h3>
-        <p class="muted small">Detailed breakdown for selected month</p>
+        <p class="muted small">Detailed breakdown for selected month with full gross-to-net calculation</p>
         <table id="employeesTable">
           <thead>
             <tr>
               <th>Employee ID</th>
               <th>Name</th>
-              <th>Email</th>
               <th>Gross</th>
-              <th>Holiday</th>
-              <th>30 ruling</th>
               <th>Taxable</th>
+              <th>Wage Tax</th>
+              <th>Tax Credit</th>
+              <th>Social Sec</th>
+              <th>Pension</th>
               <th>Net</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -224,7 +264,7 @@
     <section id="compliance" class="tab">
       <div class="card">
         <h2>Compliance & Reporting</h2>
-        <p class="muted small">Dutch payroll compliance tools: pension, health insurance, jaaropgave, and tax filings</p>
+        <p class="muted small">Dutch payroll compliance tools: pension, health insurance, jaaropgave, tax filings, and Loonaangifte</p>
         <div class="grid two">
           <div class="card">
             <h3>Pension Contributions</h3>
@@ -261,6 +301,16 @@
               <button id="btnGenerateTaxFiling">Generate</button>
             </div>
             <div id="taxFilingResults" style="margin-top:16px;"></div>
+          </div>
+          <div class="card">
+            <h3>Loonaangifte (Offline)</h3>
+            <p class="muted small">Generate monthly Loonaangifte XML files with validation. Fully offline - no Digipoort submission.</p>
+            <div class="row">
+              <input id="loonaangifteMonth" type="month" style="flex:1;" />
+              <button id="btnCreateLoonaangifteBatch">Create Batch</button>
+            </div>
+            <div id="loonaangifteBatches" style="margin-top:16px;"></div>
+            <div id="loonaangifteResults" style="margin-top:16px;"></div>
           </div>
         </div>
       </div>
@@ -337,39 +387,85 @@
       </div>
     </section>
 
-    <section id="calculators" class="tab">
-      <div class="card">
-        <h2>Termination payout calculator</h2>
-        <div class="grid two">
-          <div>
-            <label>Employee</label>
-            <select id="termEmployee"></select>
-          </div>
-          <div>
-            <label>Termination date</label>
-            <input id="termDate" type="date" />
-          </div>
-          <div>
-            <label>Holiday days per year</label>
-            <input id="termDaysPerYear" type="number" step="0.5" />
-          </div>
-          <div>
-            <label>Used holiday days YTD</label>
-            <input id="termUsedDays" type="number" step="0.5" />
-          </div>
-        </div>
-        <button id="calcTermBtn">Calculate</button>
-        <div id="termResult"></div>
-        <p class="muted small">
-          Assumes payout equals remaining vacation hours at last hourly wage plus 8 percent holiday allowance. Numbers are gross.
-        </p>
-      </div>
-    </section>
 
     <section id="settings" class="tab">
       <div class="card">
         <h2>Company settings</h2>
         <div id="company"></div>
+      </div>
+      <div class="card">
+        <h2>Rates Management</h2>
+        <p class="muted small">Manage tax tables, social security rates, minimum wage, and pension schemes with period-based validity windows.</p>
+        <div class="grid two">
+          <div>
+            <h3>Tax Tables</h3>
+            <button id="btnViewTaxTables" class="secondary">View Tax Tables</button>
+            <button id="btnAddTaxTable" class="secondary">Add Tax Table</button>
+            <div id="taxTablesList" style="margin-top:16px;"></div>
+          </div>
+          <div>
+            <h3>Social Security Rates</h3>
+            <button id="btnViewSocialSecurity" class="secondary">View Rates</button>
+            <button id="btnAddSocialSecurity" class="secondary">Add Rates</button>
+            <div id="socialSecurityList" style="margin-top:16px;"></div>
+          </div>
+          <div>
+            <h3>Minimum Wage</h3>
+            <button id="btnViewMinimumWage" class="secondary">View Minimum Wages</button>
+            <button id="btnAddMinimumWage" class="secondary">Add Minimum Wage</button>
+            <div id="minimumWageList" style="margin-top:16px;"></div>
+          </div>
+          <div>
+            <h3>Pension Schemes</h3>
+            <button id="btnViewPensionSchemes" class="secondary">View Schemes</button>
+            <button id="btnAddPensionScheme" class="secondary">Add Scheme</button>
+            <div id="pensionSchemesList" style="margin-top:16px;"></div>
+          </div>
+        </div>
+        <div class="card" style="margin-top:16px;">
+          <h3>Period Coverage Check</h3>
+          <p class="muted small">Check if all required rates are available for a period range</p>
+          <div class="row">
+            <input id="coverageStart" type="date" style="flex:1;" />
+            <input id="coverageEnd" type="date" style="flex:1;" />
+            <button id="btnCheckCoverage" class="secondary">Check Coverage</button>
+          </div>
+          <div id="coverageResult" style="margin-top:16px;"></div>
+        </div>
+        <div class="card" style="margin-top:16px;">
+          <h3>Import Tax Tables</h3>
+          <p class="muted small">Import tax tables from Excel file (e.g., wit_mnd_nl_std format)</p>
+          <div style="margin-bottom:8px;">
+            <label style="display:block; margin-bottom:4px;">Period Start (YYYY-MM-DD):</label>
+            <input type="date" id="taxTablePeriodStart" style="width:100%; padding:4px;" />
+          </div>
+          <div style="margin-bottom:8px;">
+            <label style="display:block; margin-bottom:4px;">Period End (YYYY-MM-DD):</label>
+            <input type="date" id="taxTablePeriodEnd" style="width:100%; padding:4px;" />
+          </div>
+          <div style="margin-bottom:8px;">
+            <label style="display:block; margin-bottom:4px;">Table Type:</label>
+            <select id="taxTableType" style="width:100%; padding:4px;">
+              <option value="loonheffing">Loonheffing</option>
+              <option value="loonheffing_korting">Loonheffing Korting</option>
+              <option value="loonheffing_arbeidskorting">Loonheffing Arbeidskorting</option>
+            </select>
+          </div>
+          <div style="margin-bottom:8px;">
+            <label style="display:block; margin-bottom:4px;">Tax Year (optional):</label>
+            <input type="number" id="taxTableYear" min="2000" max="2100" style="width:100%; padding:4px;" />
+          </div>
+          <input type="file" id="taxTableFileInput" accept=".xlsx,.xls" style="margin-bottom:8px;" />
+          <button id="btnImportTaxTable" class="secondary" style="margin-top:8px;">Import Tax Table from Excel</button>
+          <div id="taxTableImportResult" style="margin-top:16px;"></div>
+        </div>
+        <div class="card" style="margin-top:16px;">
+          <h3>Import Rates (JSON)</h3>
+          <p class="muted small">Import rates from JSON file</p>
+          <input type="file" id="ratesFileInput" accept=".json" />
+          <button id="btnImportRates" class="secondary" style="margin-top:8px;">Import Rates</button>
+          <div id="importResult" style="margin-top:16px;"></div>
+        </div>
       </div>
     </section>
 
@@ -432,6 +528,13 @@
           </table>
         </div>
         <div style="margin-top:32px;padding-top:24px;border-top:2px solid rgba(138,180,255,0.2);">
+          <h3>Payslip History</h3>
+          <p class="muted small" style="margin-bottom:16px;">View and download payslips for this employee</p>
+          <div id="employeePayslips">
+            <p class="muted small">Loading payslips...</p>
+          </div>
+        </div>
+        <div style="margin-top:32px;padding-top:24px;border-top:2px solid rgba(138,180,255,0.2);">
           <h3>Change History</h3>
           <p class="muted small" style="margin-bottom:16px;">Track all changes made to this employee record</p>
           <div id="employeeHistory">
@@ -443,6 +546,42 @@
     <div class="modal-overlay" id="modalOverlay"></div>
   </div>
 
-  <script src="/main.js"></script>
+  <!-- Payslip Modal -->
+  <div id="payslipModal" class="modal" hidden>
+    <div class="modal-content" style="max-width:900px;">
+      <div class="modal-header">
+        <h2 id="payslipModalTitle">Payslip</h2>
+        <button class="modal-close" id="closePayslipModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="row" style="margin-bottom:16px;">
+          <button id="btnDownloadPayslip" class="success">Download PDF</button>
+          <button id="btnPrintPayslip" class="secondary">Print</button>
+        </div>
+        <div id="payslipPdfViewer" style="border:1px solid rgba(138,180,255,0.2);border-radius:8px;padding:0;background:#ffffff;min-height:600px;overflow:auto;">
+          <p class="muted" style="padding:24px;">Loading payslip...</p>
+        </div>
+      </div>
+    </div>
+    <div class="modal-overlay" id="payslipModalOverlay"></div>
+  </div>
+
+  <!-- Payroll Detail Modal -->
+  <div id="payrollDetailModal" class="modal" hidden>
+    <div class="modal-content" style="max-width:900px;">
+      <div class="modal-header">
+        <h2 id="payrollDetailModalTitle">Payroll Detail</h2>
+        <button id="closePayrollDetailModal" class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="payrollDetailModalContent">
+          <p class="muted">Loading...</p>
+        </div>
+      </div>
+    </div>
+    <div class="modal-overlay" id="payrollDetailModalOverlay"></div>
+  </div>
+
+  <script type="module" src="/main.js"></script>
 </body>
 </html>

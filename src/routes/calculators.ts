@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { getEmployeeById } from '../services/employeeRegistry.js'
+import { round2 } from '../utils/currency.js'
 
 export const calculators = Router()
 
@@ -42,5 +43,3 @@ calculators.get('/termination', (req, res) => {
     totalGross: round2(payoutGross + allowance)
   })
 })
-
-function round2 (n: number) { return Math.round(n * 100) / 100 }

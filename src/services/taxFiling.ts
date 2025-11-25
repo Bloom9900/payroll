@@ -1,5 +1,6 @@
 import { listEmployees } from './employeeRegistry.js'
 import { calculateMonthlyPayroll } from './netherlandsPayroll.js'
+import { centsToEuro } from '../utils/currency.js'
 
 export type TaxFilingData = {
   month: string
@@ -31,10 +32,6 @@ export type TaxFiling = {
 }
 
 const taxFilings: TaxFiling[] = []
-
-function centsToEuro(value: number): number {
-  return Math.round(value) / 100
-}
 
 export function generateTaxFiling(month: string): TaxFiling {
   const employees = listEmployees()

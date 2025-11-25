@@ -3,7 +3,7 @@ import { DummyEmployee } from '../data/dummy.js'
 export type EmployeeChange = {
   id: string
   employeeId: string
-  changeType: 'created' | 'updated' | 'deleted'
+  changeType: 'created' | 'updated' | 'deleted' | 'payslip_issued'
   field?: string
   oldValue?: any
   newValue?: any
@@ -16,7 +16,7 @@ const employeeHistory: EmployeeChange[] = []
 
 export function logEmployeeChange(
   employeeId: string,
-  changeType: 'created' | 'updated' | 'deleted',
+  changeType: EmployeeChange['changeType'],
   changes: Record<string, { old: any; new: any }>,
   changedBy?: string
 ): void {

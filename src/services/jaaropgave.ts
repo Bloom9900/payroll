@@ -1,5 +1,6 @@
 import { DummyEmployee } from '../data/dummy.js'
 import { calculateMonthlyPayroll } from './netherlandsPayroll.js'
+import { centsToEuro } from '../utils/currency.js'
 
 export type JaaropgaveData = {
   employee: DummyEmployee
@@ -29,10 +30,6 @@ export type Jaaropgave = {
 }
 
 const jaaropgaves: Jaaropgave[] = []
-
-function centsToEuro(value: number): number {
-  return Math.round(value) / 100
-}
 
 export function generateJaaropgave(employee: DummyEmployee, year: number): Jaaropgave {
   const months = Array.from({ length: 12 }, (_, i) => {

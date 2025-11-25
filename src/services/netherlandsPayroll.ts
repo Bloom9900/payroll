@@ -1,15 +1,16 @@
 import { DummyEmployee } from '../data/dummy.js'
+import {
+  getTaxConfiguration,
+  calculateProgressiveTax,
+  calculateWageTaxCredit,
+  checkMinimumWageCompliance,
+  type TaxConfiguration
+} from './taxConfiguration.js'
+import { calculatePensionContribution, getPensionProvider } from './pension.js'
+import { calculateHealthInsurance, getHealthInsuranceProvider } from './healthInsurance.js'
 
 export const HOLIDAY_ALLOWANCE_RATE = 0.08
 export const STATUTORY_INTEREST_RATE = 0.08
-export const SOCIAL_SECURITY_RATE = 0.2775
-const SOCIAL_SECURITY_CEILING_CENTS = 3714900
-
-const TAX_BRACKETS_2024 = [
-  { limit: 3714900, rate: 0.3697 },
-  { limit: 7551800, rate: 0.495 },
-  { limit: Number.POSITIVE_INFINITY, rate: 0.495 }
-]
 
 export type PayrollCalculationInput = {
   employee: DummyEmployee
@@ -40,7 +41,23 @@ export type PayrollCalculationResult = {
     }
     deductions: {
       wageTaxCents: number
+      wageTaxCreditCents: number
       socialSecurityCents: number
+      socialSecurityBreakdown: {
+        aowCents: number
+        anwCents: number
+        wlzCents: number
+        wwCents: number
+        wiaCents: number
+      }
+      pensionEmployeeCents: number
+      healthInsuranceEmployeeCents: number
+    }
+    employerCosts: {
+      pensionEmployerCents: number
+      healthInsuranceEmployerCents: number
+      zvwEmployerCents: number
+      totalEmployerCostsCents: number
     }
     adjustments: {
       outstandingHolidayPayoutCents: number
@@ -48,11 +65,22 @@ export type PayrollCalculationResult = {
     }
     netCents: number
   }
+  compliance: {
+    minimumWage: {
+      compliant: boolean
+      requiredCents: number
+      actualCents: number
+      shortfallCents: number
+    }
+  }
   metadata: {
     paymentDueDate: string
     paymentDate: string
     statutoryInterestRate: number
     terminationDate?: string | null
+    taxConfigurationPeriod: string
+    pensionProvider?: string
+    healthInsuranceProvider?: string
   }
 }
 
@@ -80,21 +108,7 @@ function diffDaysInclusive (start: Date, end: Date): number {
   return Math.floor(ms / (1000 * 60 * 60 * 24)) + 1
 }
 
-function progressiveTax (amountCents: number): number {
-  let remaining = Math.max(0, amountCents)
-  let taxed = 0
-  let floor = 0
-  for (const bracket of TAX_BRACKETS_2024) {
-    if (remaining <= 0) break
-    const span = Math.min(remaining, bracket.limit - floor)
-    if (span > 0) {
-      taxed += span * bracket.rate
-      remaining -= span
-    }
-    floor = bracket.limit
-  }
-  return Math.round(taxed)
-}
+// Removed - now using calculateProgressiveTax from taxConfiguration
 
 function calculateLatePaymentFee (baseAmountCents: number, due: Date, paid: Date): number {
   const daysLate = Math.max(0, Math.floor((paid.getTime() - due.getTime()) / (1000 * 60 * 60 * 24)))
@@ -125,6 +139,9 @@ export function calculateMonthlyPayroll (input: PayrollCalculationInput): Payrol
   const employmentStart = toDate(employee.startDate)
   const employmentEnd = toDate(employee.endDate ?? undefined)
 
+  // Get tax configuration for the period
+  const taxConfig = getTaxConfiguration(month)
+
   const monthStart = window.start
   const monthEnd = window.end
 
@@ -145,23 +162,73 @@ export function calculateMonthlyPayroll (input: PayrollCalculationInput): Payrol
   const totalDaysInMonth = diffDaysInclusive(monthStart, monthEnd)
   const proRatedFactor = totalDaysInMonth > 0 ? Math.max(0, Math.min(1, effectiveWorkedDays / totalDaysInMonth)) : 0
 
+  // Calculate gross salary
   const grossCents = Math.round(employee.annualSalaryCents * proRatedFactor / 12)
+
+  // Check minimum wage compliance
+  const minimumWageCheck = checkMinimumWageCompliance(grossCents, employee.hoursPerWeek, taxConfig)
+
+  // 30% ruling calculation
   const ruling30AnnualCents = employee.isThirtyPercentRuling ? Math.round(employee.annualSalaryCents * 0.3) : 0
   const ruling30Cents = Math.round(ruling30AnnualCents / 12 * proRatedFactor)
 
+  // Holiday allowance (8% accrual)
   const annualHolidayAccrualCents = employee.holidayAllowanceEligible ? Math.round(employee.annualSalaryCents * HOLIDAY_ALLOWANCE_RATE) : 0
   const holidayAccrualCents = employee.holidayAllowanceEligible ? Math.round(annualHolidayAccrualCents / 12 * proRatedFactor) : 0
 
+  // Calculate taxable base (gross + holiday allowance - 30% ruling)
   const annualTaxableBaseCents = employee.annualSalaryCents + annualHolidayAccrualCents - ruling30AnnualCents
-  const annualTaxCents = progressiveTax(annualTaxableBaseCents)
+  const monthlyTaxableBaseCents = Math.round(annualTaxableBaseCents / 12 * proRatedFactor)
+
+  // Calculate wage tax using progressive tax brackets
+  const annualTaxCents = calculateProgressiveTax(annualTaxableBaseCents, taxConfig.taxBrackets)
   const wageTaxCents = Math.round(annualTaxCents / 12 * proRatedFactor)
 
-  const annualSocialSecurityBase = Math.min(annualTaxableBaseCents, SOCIAL_SECURITY_CEILING_CENTS)
-  const annualSocialSecurityCents = Math.round(annualSocialSecurityBase * SOCIAL_SECURITY_RATE)
-  const socialSecurityCents = Math.round(annualSocialSecurityCents / 12 * proRatedFactor)
+  // Calculate wage tax credit (heffingskorting)
+  const annualWageTaxCreditCents = calculateWageTaxCredit(annualTaxableBaseCents, taxConfig)
+  const wageTaxCreditCents = Math.round(annualWageTaxCreditCents / 12 * proRatedFactor)
 
-  const baseNetCents = grossCents - wageTaxCents - socialSecurityCents
+  // Calculate social security contributions with detailed breakdown
+  const annualSocialSecurityBase = Math.min(annualTaxableBaseCents, taxConfig.socialSecurityCeilingCents)
+  const monthlySocialSecurityBase = Math.round(annualSocialSecurityBase / 12 * proRatedFactor)
+  
+  const socialSecurityBreakdown = {
+    aowCents: Math.round(monthlySocialSecurityBase * taxConfig.socialSecurityRates.aow),
+    anwCents: Math.round(monthlySocialSecurityBase * taxConfig.socialSecurityRates.anw),
+    wlzCents: Math.round(monthlySocialSecurityBase * taxConfig.socialSecurityRates.wlz),
+    wwCents: Math.round(monthlySocialSecurityBase * taxConfig.socialSecurityRates.ww),
+    wiaCents: Math.round(monthlySocialSecurityBase * taxConfig.socialSecurityRates.wia)
+  }
+  const socialSecurityCents = Math.round(monthlySocialSecurityBase * taxConfig.socialSecurityRates.total)
 
+  // Calculate pension contributions
+  const pensionCalculation = calculatePensionContribution(
+    employee,
+    grossCents,
+    taxConfig.pensionBaseRate,
+    taxConfig.pensionBaseRate
+  )
+  const pensionEmployeeCents = pensionCalculation.employeeContribution
+  const pensionEmployerCents = pensionCalculation.employerContribution
+
+  // Calculate health insurance
+  const healthInsuranceCalculation = calculateHealthInsurance(employee)
+  const healthInsuranceEmployeeCents = healthInsuranceCalculation.employeePremium
+  const healthInsuranceEmployerCents = healthInsuranceCalculation.employerContribution
+
+  // Calculate ZVW (health insurance employer contribution) - separate from health insurance premium
+  // ZVW is calculated on gross salary
+  const zvwEmployerCents = Math.round(grossCents * taxConfig.healthInsuranceEmployerRate)
+
+  // Calculate net salary
+  const baseNetCents = grossCents 
+    - wageTaxCents 
+    + wageTaxCreditCents 
+    - socialSecurityCents 
+    - pensionEmployeeCents 
+    - healthInsuranceEmployeeCents
+
+  // Holiday allowance calculations
   const holidayAllowanceDueCents = Math.max(0, employee.holidayAllowanceAccruedCentsYtd + holidayAccrualCents - employee.holidayAllowancePaidCentsYtd)
 
   const isLeaver = Boolean(employmentEnd && employmentEnd.getUTCFullYear() === monthEnd.getUTCFullYear() && employmentEnd.getUTCMonth() === monthEnd.getUTCMonth())
@@ -183,7 +250,15 @@ export function calculateMonthlyPayroll (input: PayrollCalculationInput): Payrol
   const latePaymentFeeCents = calculateLatePaymentFee(netBeforeFeeCents, dueDate, paymentDate)
   const netCents = netBeforeFeeCents + latePaymentFeeCents
 
+  // Calculate total taxable amount
   const taxableCents = Math.max(0, grossCents + holidayAllowancePaymentCents + outstandingHolidayPayoutCents + holidayAccrualCents - ruling30Cents)
+
+  // Calculate total employer costs
+  const totalEmployerCostsCents = grossCents 
+    + pensionEmployerCents 
+    + healthInsuranceEmployerCents 
+    + zvwEmployerCents 
+    + holidayAccrualCents
 
   return {
     employee,
@@ -207,7 +282,17 @@ export function calculateMonthlyPayroll (input: PayrollCalculationInput): Payrol
       },
       deductions: {
         wageTaxCents,
-        socialSecurityCents
+        wageTaxCreditCents,
+        socialSecurityCents,
+        socialSecurityBreakdown,
+        pensionEmployeeCents,
+        healthInsuranceEmployeeCents
+      },
+      employerCosts: {
+        pensionEmployerCents,
+        healthInsuranceEmployerCents,
+        zvwEmployerCents,
+        totalEmployerCostsCents
       },
       adjustments: {
         outstandingHolidayPayoutCents,
@@ -215,11 +300,17 @@ export function calculateMonthlyPayroll (input: PayrollCalculationInput): Payrol
       },
       netCents
     },
+    compliance: {
+      minimumWage: minimumWageCheck
+    },
     metadata: {
       paymentDueDate: dueDate.toISOString().slice(0, 10),
       paymentDate: paymentDate.toISOString().slice(0, 10),
       statutoryInterestRate: STATUTORY_INTEREST_RATE,
-      terminationDate: employee.endDate ?? null
+      terminationDate: employee.endDate ?? null,
+      taxConfigurationPeriod: month,
+      pensionProvider: pensionCalculation.employeeContribution > 0 ? getPensionProvider(employee) : undefined,
+      healthInsuranceProvider: getHealthInsuranceProvider(employee)
     }
   }
 }
